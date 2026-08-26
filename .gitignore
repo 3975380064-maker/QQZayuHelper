@@ -10,3 +10,4 @@ make_icons.sh
 .backup/
 .operit/
 .kotlin/
+*.apk
