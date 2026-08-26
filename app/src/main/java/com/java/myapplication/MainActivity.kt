@@ -252,8 +252,38 @@ class MainActivity : Activity() {
             text = "（修改勾选后自动保存，无需手动保存）"
             textSize = 12f
             setTextColor(0xFF999999.toInt())
-            setPadding(0, 8, 0, 32)
+            setPadding(0, 8, 0, 8)
         })
+
+        // ───── 作者信息 ─────
+        layout.addView(TextView(this).apply {
+            text = " "
+            textSize = 8f
+        })
+
+        layout.addView(TextView(this).apply {
+            text = "作者：QQ杂鱼助手"
+            textSize = 13f
+            setTextColor(0xFF666666.toInt())
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            setPadding(0, 8, 0, 4)
+        })
+
+        val tvGithub = TextView(this)
+        tvGithub.text = "https://github.com/3975380064-maker/QQZayuHelper"
+        tvGithub.textSize = 12f
+        tvGithub.setTextColor(0xFF1976D2.toInt())
+        tvGithub.gravity = android.view.Gravity.CENTER_HORIZONTAL
+        tvGithub.setPadding(0, 0, 0, 32)
+        tvGithub.setOnClickListener {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/3975380064-maker/QQZayuHelper"))
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+            }
+        }
+        layout.addView(tvGithub)
 
         scrollView.addView(layout)
         setContentView(scrollView)
