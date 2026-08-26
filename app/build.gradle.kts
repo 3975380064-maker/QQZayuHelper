@@ -39,6 +39,5 @@ configurations.all {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.3.10")
     implementation("androidx.core:core-ktx:1.10.1")
 }
