@@ -19,6 +19,12 @@ class QQAccessibilityService : AccessibilityService() {
         private const val PKG_QQ = "com.tencent.mobileqq"
         private const val PKG_QQI = "com.tencent.mobileqqi"
         private const val PLACEHOLDER = "\ue000BM\ue001"
+        /** 回显跳过窗口：800ms，比之前 600ms 更宽松，减少慢设备误判 */
+        private const val ECHO_WINDOW_MS = 800L
+        /** root 重试延迟 */
+        private const val ROOT_RETRY_DELAY_MS = 80L
+        /** 重试次数 */
+        private const val ROOT_RETRY_MAX = 3
     }
 
     private var userOriginal = ""
@@ -43,7 +49,8 @@ class QQAccessibilityService : AccessibilityService() {
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                 AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-        info.notificationTimeout = 50
+        // 增大合并窗口，减少事件拆分
+        info.notificationTimeout = 300
         info.packageNames = arrayOf(PKG_QQ, PKG_QQI)
         serviceInfo = info
 
@@ -79,7 +86,6 @@ class QQAccessibilityService : AccessibilityService() {
             }
 
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                // 点击发送按钮：不做任何文本替换，让消息原样发出
                 val src = event.source ?: return
                 src.recycle()
             }
@@ -88,7 +94,6 @@ class QQAccessibilityService : AccessibilityService() {
                 val cfg = loadConfig()
                 val mode = cfg.processingMode
 
-                // 判断文本是变长了还是变短了（删除操作）
                 val cs = event.text ?: return
                 val currentText = cs.toString()
                 if (currentText.length < lastTextLength) {
@@ -99,21 +104,11 @@ class QQAccessibilityService : AccessibilityService() {
                 lastTextLength = currentText.length
 
                 if (mode == CatConfig.REAL_TIME_MODE) {
-                    // 用户自定义空闲延迟
                     handler.removeCallbacks(idleTask)
                     handler.postDelayed(idleTask, cfg.idleDelayMs.toLong())
                 } else {
-                    // 标点模式
-                    val root = rootInActiveWindow ?: return
-                    val inp = findNodeById(root, ID_INPUT) ?: findEditable(root)
-                    root.recycle()
-                    if (inp == null) return
-
-                    val text = inp.text
-                    inp.recycle()
-                    if (text == null || text.isEmpty()) return
-
-                    val raw = text.toString().trim()
+                    // 标点模式：直接用 event.text 判断，避免 rootInActiveWindow 为 null
+                    val raw = currentText.trim()
                     if (raw.isNotEmpty() && isPunctuationEnding(raw)) {
                         Log.d(TAG, "标点触发: $raw")
                         doProcess()
@@ -127,125 +122,131 @@ class QQAccessibilityService : AccessibilityService() {
         processing = false
     }
 
-    fun doProcess() {
-        if (processing) return
-        processing = true
-
-        val cfg = loadConfig()
-        // 总开关：关闭时不处理任何内容
-        if (!cfg.enabled) {
-            processing = false
-            return
+    /**
+     * 带重试的 root 获取：刚切换窗口时 rootInActiveWindow 可能延迟返回 null
+     */
+    private fun findRootWithRetry(): AccessibilityNodeInfo? {
+        var retries = 0
+        while (retries < ROOT_RETRY_MAX) {
+            val root = rootInActiveWindow
+            if (root != null) return root
+            retries++
+            if (retries < ROOT_RETRY_MAX) {
+                try { Thread.sleep(ROOT_RETRY_DELAY_MS) } catch (_: InterruptedException) { break }
+            }
         }
-
-        val root = rootInActiveWindow ?: run {
-            processing = false; return
-        }
-
-        var inp = findNodeById(root, ID_INPUT)
-        if (inp == null) {
-            inp = findEditable(root)
-        }
-        if (inp == null) {
-            root.recycle()
-            processing = false
-            return
-        }
-
-        val cs = inp.text
-        if (cs == null || cs.isEmpty()) {
-            inp.recycle()
-            root.recycle()
-            processing = false
-            userOriginal = ""
-            lastSet = ""
-            return
-        }
-
-        // ===== @mention 检测：文本包含 @ 时跳过所有处理（不破坏 ImageSpan）=====
-        val rawStr = cs.toString()
-        if (rawStr.contains('@')) {
-            Log.d(TAG, "检测到 @，跳过处理")
-            inp.recycle()
-            root.recycle()
-            processing = false
-            return
-        }
-
-        val raw = rawStr.trim()
-        if (raw.isEmpty()) {
-            inp.recycle()
-            root.recycle()
-            processing = false
-            userOriginal = ""
-            lastSet = ""
-            return
-        }
-
-        val now = System.currentTimeMillis()
-
-        // 写入回显跳过
-        if (lastWriteTime > 0 && now - lastWriteTime < 600 && lastSet == raw) {
-            Log.d(TAG, "写入回显跳过")
-            lastWriteTime = 0
-            inp.recycle()
-            root.recycle()
-            processing = false
-            return
-        }
-
-        val isRealtime = cfg.processingMode == CatConfig.REAL_TIME_MODE
-
-        // 构建 userOriginal
-        if (!isRealtime && lastSet.isEmpty()) {
-            userOriginal = stripAll(raw, cfg)
-            Log.d(TAG, "标点首次剥离: $userOriginal")
-        } else if (lastSet.isNotEmpty() && raw.startsWith(lastSet)) {
-            val added = raw.substring(lastSet.length)
-            userOriginal += added
-            Log.d(TAG, "前缀增量: +$added  userOriginal=$userOriginal")
-        } else if (lastSet.isEmpty()) {
-            userOriginal = stripAll(raw, cfg)
-            Log.d(TAG, "首条剥离: $userOriginal")
-        } else {
-            userOriginal = stripAll(raw, cfg)
-            Log.d(TAG, "不匹配剥离: $userOriginal")
-        }
-
-        if (userOriginal.isEmpty()) {
-            Log.d(TAG, "原文为空，跳过")
-            inp.recycle()
-            root.recycle()
-            processing = false
-            return
-        }
-
-        val target = TextProcessor.process(userOriginal, cfg)
-        if (target == raw) {
-            lastSet = target
-            inp.recycle()
-            root.recycle()
-            processing = false
-            return
-        }
-
-        Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
-
-        // 替换文本，并把光标放在"喵"之前（即用户原始内容末尾）
-        val ok = setTextBeforeMeow(inp, target, userOriginal.length)
-        if (ok) {
-            lastSet = target
-            lastWriteTime = System.currentTimeMillis()
-        }
-
-        inp.recycle()
-        root.recycle()
-        processing = false
+        return null
     }
 
     /**
-     * 替换文本，并把光标设置在"喵"之前（用户原始内容末尾位置）
+     * 查找输入框，按优先级：已知 ID → 按 hint 文本 → isEditable → 按类名 EditText
      */
+    private fun findInputNode(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        // 1. 按已知 ID
+        findNodeById(root, ID_INPUT)?.let { return it }
+        // 2. 按 hint 文本（适配不同 QQ 版本）
+        findNodeByHint(root, "说点什么")?.let { return it }
+        findNodeByHint(root, "输入")?.let { return it }
+        // 3. 按 isEditable
+        findEditable(root)?.let { return it }
+        // 4. 按类名
+        findNodeByClassName(root, "android.widget.EditText")?.let { return it }
+        return null
+    }
+
+    fun doProcess() {
+        // 用 try/finally 防止 processing 卡死
+        if (processing) return
+        processing = true
+        try {
+            val cfg = loadConfig()
+            if (!cfg.enabled) return
+
+            // 带重试的 root 获取
+            val root = findRootWithRetry() ?: return
+
+            try {
+                val inp = findInputNode(root) ?: return
+
+                try {
+                    val cs = inp.text
+                    if (cs == null || cs.isEmpty()) {
+                        userOriginal = ""
+                        lastSet = ""
+                        return
+                    }
+
+                    val rawStr = cs.toString()
+
+                    // @mention 检测
+                    if (rawStr.contains('@')) {
+                        Log.d(TAG, "检测到 @，跳过处理")
+                        return
+                    }
+
+                    val raw = rawStr.trim()
+                    if (raw.isEmpty()) {
+                        userOriginal = ""
+                        lastSet = ""
+                        return
+                    }
+
+                    val now = System.currentTimeMillis()
+
+                    // 写入回显跳过（窗口放宽到 800ms）
+                    if (lastWriteTime > 0 && now - lastWriteTime < ECHO_WINDOW_MS && lastSet == raw) {
+                        Log.d(TAG, "写入回显跳过")
+                        lastWriteTime = 0
+                        return
+                    }
+
+                    val isRealtime = cfg.processingMode == CatConfig.REAL_TIME_MODE
+
+                    // 构建 userOriginal
+                    if (!isRealtime && lastSet.isEmpty()) {
+                        userOriginal = stripAll(raw, cfg)
+                        Log.d(TAG, "标点首次剥离: $userOriginal")
+                    } else if (lastSet.isNotEmpty() && raw.startsWith(lastSet)) {
+                        val added = raw.substring(lastSet.length)
+                        userOriginal += added
+                        Log.d(TAG, "前缀增量: +$added  userOriginal=$userOriginal")
+                    } else if (lastSet.isEmpty()) {
+                        userOriginal = stripAll(raw, cfg)
+                        Log.d(TAG, "首条剥离: $userOriginal")
+                    } else {
+                        userOriginal = stripAll(raw, cfg)
+                        Log.d(TAG, "不匹配剥离: $userOriginal")
+                    }
+
+                    if (userOriginal.isEmpty()) {
+                        Log.d(TAG, "原文为空，跳过")
+                        return
+                    }
+
+                    val target = TextProcessor.process(userOriginal, cfg)
+                    if (target == raw) {
+                        lastSet = target
+                        return
+                    }
+
+                    Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
+
+                    val ok = setTextBeforeMeow(inp, target, userOriginal.length)
+                    if (ok) {
+                        lastSet = target
+                        lastWriteTime = System.currentTimeMillis()
+                    }
+                } finally {
+                    inp.recycle()
+                }
+            } finally {
+                root.recycle()
+            }
+        } finally {
+            processing = false
+        }
+    }
+
     private fun setTextBeforeMeow(node: AccessibilityNodeInfo, text: String, cursorPos: Int): Boolean {
         if (node == null) return false
         return try {
@@ -260,6 +261,7 @@ class QQAccessibilityService : AccessibilityService() {
             }
             ok
         } catch (e: Exception) {
+            Log.w(TAG, "setTextBeforeMeow 异常", e)
             false
         }
     }
@@ -272,6 +274,39 @@ class QQAccessibilityService : AccessibilityService() {
         for (i in 0 until n.childCount) {
             val c = n.getChild(i) ?: continue
             val r = findNodeById(c, id)
+            c.recycle()
+            if (r != null) return r
+        }
+        return null
+    }
+
+    private fun findNodeByHint(n: AccessibilityNodeInfo?, hint: String): AccessibilityNodeInfo? {
+        if (n == null) return null
+        val text = n.text?.toString() ?: ""
+        if (text.contains(hint, ignoreCase = true)) {
+            return AccessibilityNodeInfo.obtain(n)
+        }
+        val contentDesc = n.contentDescription?.toString() ?: ""
+        if (contentDesc.contains(hint, ignoreCase = true)) {
+            return AccessibilityNodeInfo.obtain(n)
+        }
+        for (i in 0 until n.childCount) {
+            val c = n.getChild(i) ?: continue
+            val r = findNodeByHint(c, hint)
+            c.recycle()
+            if (r != null) return r
+        }
+        return null
+    }
+
+    private fun findNodeByClassName(n: AccessibilityNodeInfo?, className: String): AccessibilityNodeInfo? {
+        if (n == null) return null
+        if (className == n.className?.toString()) {
+            return AccessibilityNodeInfo.obtain(n)
+        }
+        for (i in 0 until n.childCount) {
+            val c = n.getChild(i) ?: continue
+            val r = findNodeByClassName(c, className)
             c.recycle()
             if (r != null) return r
         }
