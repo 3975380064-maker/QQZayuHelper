@@ -262,7 +262,7 @@ class MainActivity : Activity() {
         })
 
         layout.addView(TextView(this).apply {
-            text = "作者：QQ杂鱼助手"
+            text = "作者：喵喵喵"
             textSize = 13f
             setTextColor(0xFF666666.toInt())
             gravity = android.view.Gravity.CENTER_HORIZONTAL
