@@ -70,8 +70,7 @@ class QQAccessibilityService : AccessibilityService() {
         val info = AccessibilityServiceInfo()
         info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED or
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                 AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -103,11 +102,6 @@ class QQAccessibilityService : AccessibilityService() {
         if (pkg != PKG_QQ && pkg != PKG_QQI) return
 
         when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                // 窗口内容变化（如 Fragment 切换）：重置长度记录，不重置其他状态
-                lastTextLength = 0
-            }
-
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 // 只在包名变化（切到别的 app 再回来）时重置全部状态
                 // QQ 内部聊天切换不重置，保留用户输入状态
@@ -137,17 +131,20 @@ class QQAccessibilityService : AccessibilityService() {
                 val mode = cfg.processingMode
 
                 val cs = event.text ?: return
-                val currentText = cs.toString()
-                if (currentText.length < lastTextLength) {
-                    lastTextLength = currentText.length
+                // event.text 是 List<CharSequence>，需拼接成纯文本
+                val currentText = cs.joinToString("")
+                val currentLen = currentText.length
+                if (currentLen < lastTextLength) {
+                    lastTextLength = currentLen
                     return
                 }
-                lastTextLength = currentText.length
+                lastTextLength = currentLen
 
                 if (mode == CatConfig.REAL_TIME_MODE) {
                     handler.removeCallbacks(idleTask)
                     handler.postDelayed(idleTask, cfg.idleDelayMs.toLong())
                 } else {
+                    // 标点模式：判断结尾是否为标点，用纯文本判断
                     val raw = currentText.trim()
                     if (raw.isNotEmpty() && isPunctuationEnding(raw)) {
                         Log.d(TAG, "标点触发: $raw")
@@ -213,7 +210,7 @@ class QQAccessibilityService : AccessibilityService() {
             val root = findRootWithRetry() ?: return
 
             try {
-                val inp = findInputNode(root) ?: return
+                val inp = findNodeById(root, ID_INPUT) ?: return
 
                 try {
                     val cs = inp.text
@@ -284,8 +281,11 @@ class QQAccessibilityService : AccessibilityService() {
 
                     Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
 
+                    // 计算光标位置：原文经过替换（我→本喵、你→主人）后的长度，不包含喵和颜文字
+                    val cursorPos = computeCursorPos(userOriginal, cfg)
+
                     // 尝试 SET_TEXT，失败则 fallback 到剪贴板粘贴
-                    val ok = setTextOrFallback(inp, target, userOriginal.length)
+                    val ok = setTextOrFallback(inp, target, cursorPos)
                     if (ok) {
                         lastSet = target
                         lastWrittenText = target
@@ -301,6 +301,25 @@ class QQAccessibilityService : AccessibilityService() {
             processing = false
             handler.removeCallbacks(watchdogTask)
         }
+    }
+
+    /**
+     * 计算光标位置：原文经过"我→本喵"、"你→主人"替换后的长度
+     * 不包含句尾喵和颜文字，这样光标就停在"喵"前面
+     */
+    private fun computeCursorPos(original: String, cfg: CatConfig): Int {
+        var pos = original.length
+        if (cfg.enableWoToBenmiao) {
+            // "我" 替换成 cfg.woReplacement（如"本喵"），长度 +1
+            val woCount = original.count { it == '我' }
+            pos += woCount * (cfg.woReplacement.length - 1)
+        }
+        if (cfg.enableNiToZhuren) {
+            // "你" 替换成 cfg.niReplacement（如"主人"），长度 +1
+            val niCount = original.count { it == '你' }
+            pos += niCount * (cfg.niReplacement.length - 1)
+        }
+        return pos
     }
 
     /**
