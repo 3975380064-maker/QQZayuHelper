@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -128,8 +127,7 @@ object UpdateChecker {
                     if (cursor.moveToFirst()) {
                         val status = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
                         if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            val uri = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI))
-                            installApk(ctx, Uri.parse(uri))
+                            installApk(ctx)
                         }
                     }
                     cursor.close()
@@ -163,15 +161,16 @@ object UpdateChecker {
         Toast.makeText(context, "所有下载源都不可用，请手动访问 GitHub 下载", Toast.LENGTH_LONG).show()
     }
 
-    private fun installApk(context: Context, uri: Uri) {
+    private fun installApk(context: Context) {
         try {
-            // DownloadManager 保存到外部下载目录，用 FileProvider 转成 content:// URI
+            // DownloadManager 用 setDestinationInExternalPublicDir 保存到此路径
             val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ZayuHelper_update.apk")
-            val installUri: Uri = if (Build.VERSION.SDK_INT >= 24) {
-                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            } else {
-                Uri.fromFile(file)
+            if (!file.exists()) {
+                android.util.Log.w(TAG, "APK 文件不存在: ${file.absolutePath}")
+                Toast.makeText(context, "安装失败：文件未找到", Toast.LENGTH_LONG).show()
+                return
             }
+            val installUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(installUri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
