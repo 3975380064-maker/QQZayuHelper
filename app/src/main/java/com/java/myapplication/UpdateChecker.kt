@@ -6,38 +6,90 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.File
 
 /**
  * 更新检查器。
  * 通过 GitHub 镜像源获取最新版本号，并用 DownloadManager 下载 APK 安装。
+ *
+ * 镜像源来自社区维护的测速列表（2026年7月），实际延迟因运营商而异。
+ * 策略：先直连，再试第一梯队（<300ms），最后第二梯队（300-600ms）。
  */
 object UpdateChecker {
 
     private const val TAG = "UpdateChecker"
     private const val REPO_OWNER = "3975380064-maker"
     private const val REPO_NAME = "QQZayuHelper"
-    private const val APK_FILE = "QQZayuHelper_v1.2.apk"  // 文件名固定，Release 会更新
+    private const val APK_FILE = "QQZayuHelper.apk"  // Release 附件名
 
-    /** 镜像源列表，按优先级排列 */
-    private val MIRRORS = listOf(
-        "https://hub.gitmirror.com/https://github.com/%s/%s/releases/latest/download/%s",
-        "https://gh.llkk.cc/https://github.com/%s/%s/releases/latest/download/%s",
-        "https://ghproxy.com/https://github.com/%s/%s/releases/latest/download/%s",
-        "https://shturl.cc/ohz3uCOnx/https://github.com/%s/%s/releases/latest/download/%s",
-        "https://shturl.cc/H/https://github.com/%s/%s/releases/latest/download/%s"
+    /** RAW 文件加速（用于读取 build.gradle.kts 获取版本号） */
+    private val RAW_PROXIES = listOf(
+        // 直连
+        "https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        // raw 专用加速
+        "https://raw.staticdn.net/%s/%s/main/app/build.gradle.kts",
+        "https://githubraw.com/%s/%s/main/app/build.gradle.kts",
+        // 前缀代理 + raw
+        "https://github.proxy.class3.fun/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://mirror.ghproxy.com/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://gh.jasonzeng.dev/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://git.yylx.win/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://github.geekery.cn/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://gh-proxy.net/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://fastgit.cc/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        // 第二梯队
+        "https://github-proxy.com/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://github.limoruirui.com/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://gh.ddlc.top/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts"
     )
 
-    /** API 镜像源（用于获取版本信息） */
-    private val API_MIRRORS = listOf(
-        "https://hub.gitmirror.com/https://raw.githubusercontent.com/%s/%s/master/app/build.gradle.kts",
-        "https://gh.llkk.cc/https://raw.githubusercontent.com/%s/%s/master/app/build.gradle.kts",
-        "https://ghproxy.com/https://raw.githubusercontent.com/%s/%s/master/app/build.gradle.kts"
+    /** 下载源（APK 下载），先直连再加速 */
+    private val DOWNLOAD_PROXIES = listOf(
+        // 直连
+        "https://github.com/%s/%s/releases/latest/download/%s",
+        // 完整镜像站（替换 github.com）
+        "https://kkgithub.com/%s/%s/releases/latest/download/%s",
+        "https://g.nite07.org/%s/%s/releases/latest/download/%s",
+        "https://7ed.net/%s/%s/releases/latest/download/%s",
+        "https://bgithub.xyz/%s/%s/releases/latest/download/%s",
+        // 第一梯队前缀代理（<300ms）
+        "https://github.proxy.class3.fun/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://mirror.ghproxy.com/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gh.jasonzeng.dev/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://tvv.tw/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://git.yylx.win/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://github.geekery.cn/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghfile.geekertao.top/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghproxy.imciel.com/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghm.078465.xyz/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gh-proxy.net/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gitproxy.click/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghpxy.hwinzniej.top/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://fastgit.cc/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghproxy.cxkpro.top/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gh.chjina.com/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gitproxy.mrhjx.cn/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghproxy.cfd/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghp.keleyaa.com/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://g.cachecdn.ggff.net/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://github.ednovas.xyz/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gh.llkk.cc/https://github.com/%s/%s/releases/latest/download/%s",
+        // 第二梯队前缀代理（300-600ms，备用）
+        "https://github.limoruirui.com/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://g.blfrp.cn/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gh.ddlc.top/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gp-us.fyan.top/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghproxy.monkeyray.net/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://hub.gitmirror.com/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://github-proxy.com/https://github.com/%s/%s/releases/latest/download/%s"
     )
 
     private var downloadId: Long = -1L
@@ -87,10 +139,10 @@ object UpdateChecker {
         context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
             Context.RECEIVER_EXPORTED)
 
-        // 遍历镜像源尝试下载
-        for (mirror in MIRRORS) {
+        // 遍历下载源尝试
+        for (proxy in DOWNLOAD_PROXIES) {
             try {
-                val url = mirror.format(REPO_OWNER, REPO_NAME, APK_FILE)
+                val url = proxy.format(REPO_OWNER, REPO_NAME, APK_FILE)
                 val request = DownloadManager.Request(Uri.parse(url))
                 request.setTitle("杂鱼助手更新")
                 request.setDescription("正在下载新版本...")
@@ -103,18 +155,25 @@ object UpdateChecker {
                 onStart()
                 return
             } catch (e: Exception) {
-                android.util.Log.w(TAG, "镜像下载失败: $mirror", e)
+                android.util.Log.w(TAG, "下载源失败: $proxy", e)
             }
         }
 
         onComplete(false)
-        Toast.makeText(context, "所有镜像源都不可用，请手动访问 GitHub 下载", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "所有下载源都不可用，请手动访问 GitHub 下载", Toast.LENGTH_LONG).show()
     }
 
     private fun installApk(context: Context, uri: Uri) {
         try {
+            // DownloadManager 保存到外部下载目录，用 FileProvider 转成 content:// URI
+            val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ZayuHelper_update.apk")
+            val installUri: Uri = if (Build.VERSION.SDK_INT >= 24) {
+                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            } else {
+                Uri.fromFile(file)
+            }
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
+                setDataAndType(installUri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -137,12 +196,13 @@ object UpdateChecker {
      * 从镜像源读取 build.gradle.kts 获取最新版本号。
      */
     private fun fetchLatestVersion(): String? {
-        for (mirror in API_MIRRORS) {
+        for (proxy in RAW_PROXIES) {
             try {
-                val url = mirror.format(REPO_OWNER, REPO_NAME)
+                val url = proxy.format(REPO_OWNER, REPO_NAME)
                 val connection = URL(url).openConnection() as HttpURLConnection
                 connection.connectTimeout = 8000
                 connection.readTimeout = 8000
+                connection.instanceFollowRedirects = true
                 connection.requestMethod = "GET"
 
                 if (connection.responseCode == 200) {
@@ -159,7 +219,7 @@ object UpdateChecker {
                 }
                 connection.disconnect()
             } catch (e: Exception) {
-                android.util.Log.w(TAG, "API 镜像失败: $mirror", e)
+                android.util.Log.w(TAG, "RAW 源失败: $proxy", e)
             }
         }
         return null
