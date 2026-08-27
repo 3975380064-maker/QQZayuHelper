@@ -375,6 +375,19 @@ class MainActivity : Activity() {
     }
 
     private fun showUpdateDialog(version: String) {
+        // 检查安装未知应用权限
+        if (!UpdateChecker.canRequestInstallPackages(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("需要安装权限")
+                .setMessage("请先开启「安装未知应用」权限，否则无法自动安装更新。")
+                .setPositiveButton("去设置") { _, _ ->
+                    UpdateChecker.openInstallPermissionSettings(this)
+                }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
+
         AlertDialog.Builder(this)
             .setTitle("发现新版本 v$version")
             .setMessage("是否下载更新？")

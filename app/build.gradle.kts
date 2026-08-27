@@ -10,8 +10,8 @@ android {
         applicationId = "com.java.myapplication"
         minSdk = 24
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 5
+        versionName = "1.4"
     }
 
     buildTypes {

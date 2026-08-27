@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.Settings
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.BufferedReader
@@ -127,7 +129,8 @@ object UpdateChecker {
                     if (cursor.moveToFirst()) {
                         val status = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
                         if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            installApk(ctx)
+                            val uriStr = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI))
+                            installApk(ctx, uriStr)
                         }
                     }
                     cursor.close()
@@ -161,24 +164,61 @@ object UpdateChecker {
         Toast.makeText(context, "所有下载源都不可用，请手动访问 GitHub 下载", Toast.LENGTH_LONG).show()
     }
 
-    private fun installApk(context: Context) {
-        try {
-            // DownloadManager 用 setDestinationInExternalPublicDir 保存到此路径
-            val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ZayuHelper_update.apk")
-            if (!file.exists()) {
-                android.util.Log.w(TAG, "APK 文件不存在: ${file.absolutePath}")
-                Toast.makeText(context, "安装失败：文件未找到", Toast.LENGTH_LONG).show()
-                return
-            }
-            val installUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(installUri, "application/vnd.android.package-archive")
+    /**
+     * 检查是否已授予安装未知应用权限（Android 8.0+）。
+     */
+    fun canRequestInstallPackages(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.packageManager.canRequestPackageInstalls()
+        } else {
+            true // Android 8.0 以下不需要此权限
+        }
+    }
+
+    /**
+     * 跳转到系统设置开启"安装未知应用"权限。
+     */
+    fun openInstallPermissionSettings(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:${context.packageName}")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        }
+    }
+
+    private fun installApk(context: Context, uriStr: String) {
+        try {
+            val uri = Uri.parse(uriStr)
+            // content:// 或 file:// URI 直接传给系统安装器
+            // 对 file:// 需要加 FLAG_GRANT_READ_URI_PERMISSION
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (uri.scheme == "file") {
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
             }
             context.startActivity(intent)
         } catch (e: Exception) {
             android.util.Log.w(TAG, "安装失败", e)
+            // 兜底：用已知路径 + FileProvider
+            try {
+                val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ZayuHelper_update.apk")
+                if (file.exists()) {
+                    val fallbackUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(fallbackUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(intent)
+                    return
+                }
+            } catch (e2: Exception) {
+                android.util.Log.w(TAG, "兜底安装也失败", e2)
+            }
             Toast.makeText(context, "安装失败，请手动打开下载目录安装", Toast.LENGTH_LONG).show()
         }
     }
