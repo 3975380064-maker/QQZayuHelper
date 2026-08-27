@@ -10,6 +10,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 
 /**
  * 文本替换核心引擎。
@@ -124,76 +125,71 @@ class TextReplaceEngine(private val service: AccessibilityService) {
             val cfg = loadConfig()
             if (!cfg.enabled) return
 
-            val root = findRootWithRetry() ?: return
+            val inp = findInputNode() ?: return
             try {
-                val inp = findNodeById(root, ID_INPUT) ?: return
-                try {
-                    val cs = inp.text
-                    if (cs == null || cs.isEmpty()) {
-                        userOriginal = ""
-                        lastSet = ""
+                val cs = inp.text
+                if (cs == null || cs.isEmpty()) {
+                    userOriginal = ""
+                    lastSet = ""
+                    return
+                }
+
+                val rawStr = cs.toString()
+                if (rawStr.contains('@')) {
+                    Log.d(TAG, "检测到 @，跳过处理")
+                    return
+                }
+
+                val raw = rawStr.trim()
+                if (raw.isEmpty()) {
+                    userOriginal = ""
+                    lastSet = ""
+                    return
+                }
+
+                val now = System.currentTimeMillis()
+
+                // 回显判定
+                if (lastWriteTime > 0 && now - lastWriteTime < ECHO_WINDOW_MS) {
+                    if (raw == lastWrittenText) {
+                        Log.d(TAG, "回显跳过（内容匹配）: $raw")
+                        lastWriteTime = 0
                         return
                     }
+                }
 
-                    val rawStr = cs.toString()
-                    if (rawStr.contains('@')) {
-                        Log.d(TAG, "检测到 @，跳过处理")
-                        return
-                    }
+                val isRealtime = cfg.processingMode == CatConfig.REAL_TIME_MODE
 
-                    val raw = rawStr.trim()
-                    if (raw.isEmpty()) {
-                        userOriginal = ""
-                        lastSet = ""
-                        return
-                    }
+                if (!isRealtime && lastSet.isEmpty()) {
+                    userOriginal = stripAll(raw, cfg)
+                } else if (lastSet.isNotEmpty() && raw.startsWith(lastSet)) {
+                    val added = raw.substring(lastSet.length)
+                    userOriginal += added
+                } else if (lastSet.isEmpty()) {
+                    userOriginal = stripAll(raw, cfg)
+                } else {
+                    userOriginal = stripAll(raw, cfg)
+                }
 
-                    val now = System.currentTimeMillis()
+                if (userOriginal.isEmpty()) return
 
-                    // 回显判定
-                    if (lastWriteTime > 0 && now - lastWriteTime < ECHO_WINDOW_MS) {
-                        if (raw == lastWrittenText) {
-                            Log.d(TAG, "回显跳过（内容匹配）: $raw")
-                            lastWriteTime = 0
-                            return
-                        }
-                    }
+                val target = TextProcessor.process(userOriginal, cfg)
+                if (target == raw) {
+                    lastSet = target
+                    return
+                }
 
-                    val isRealtime = cfg.processingMode == CatConfig.REAL_TIME_MODE
+                Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
 
-                    if (!isRealtime && lastSet.isEmpty()) {
-                        userOriginal = stripAll(raw, cfg)
-                    } else if (lastSet.isNotEmpty() && raw.startsWith(lastSet)) {
-                        val added = raw.substring(lastSet.length)
-                        userOriginal += added
-                    } else if (lastSet.isEmpty()) {
-                        userOriginal = stripAll(raw, cfg)
-                    } else {
-                        userOriginal = stripAll(raw, cfg)
-                    }
-
-                    if (userOriginal.isEmpty()) return
-
-                    val target = TextProcessor.process(userOriginal, cfg)
-                    if (target == raw) {
-                        lastSet = target
-                        return
-                    }
-
-                    Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
-
-                    val cursorPos = computeCursorPos(userOriginal, cfg)
-                    val ok = setTextOrFallback(inp, target, cursorPos)
-                    if (ok) {
-                        lastSet = target
-                        lastWrittenText = target
-                        lastWriteTime = System.currentTimeMillis()
-                    }
-                } finally {
-                    inp.recycle()
+                val cursorPos = computeCursorPos(userOriginal, cfg)
+                val ok = setTextOrFallback(inp, target, cursorPos)
+                if (ok) {
+                    lastSet = target
+                    lastWrittenText = target
+                    lastWriteTime = System.currentTimeMillis()
                 }
             } finally {
-                root.recycle()
+                inp.recycle()
             }
         } finally {
             processing = false
@@ -212,6 +208,63 @@ class TextReplaceEngine(private val service: AccessibilityService) {
             }
         }
         return service.rootInActiveWindow
+    }
+
+    /**
+     * 定位聊天输入框。
+     * 优先在当前活动窗口按 ID 查找；找不到时遍历所有窗口查找，并跳过输入法(IME)与
+     * 无障碍覆盖层窗口——解决键盘弹出时活动窗口被输入法抢占导致找不到输入框的问题。
+     * 最后一并兜底查找任意可编辑节点。
+     */
+    private fun findInputNode(): AccessibilityNodeInfo? {
+        val activeRoot = findRootWithRetry()
+        if (activeRoot != null) {
+            val byId = findNodeById(activeRoot, ID_INPUT)
+            val editable = if (byId == null) findEditable(activeRoot) else null
+            activeRoot.recycle()
+            if (byId != null) return byId
+            if (editable != null) return editable
+        }
+
+        val windows = service.getWindows() ?: return null
+        for (win in windows) {
+            val type = win.type ?: continue
+            if (type == AccessibilityWindowInfo.TYPE_INPUT_METHOD ||
+                type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
+            val root = win.root ?: continue
+            try {
+                val byId = findNodeById(root, ID_INPUT)
+                if (byId != null) return byId
+            } finally {
+                root.recycle()
+            }
+        }
+        for (win in windows) {
+            val type = win.type ?: continue
+            if (type == AccessibilityWindowInfo.TYPE_INPUT_METHOD ||
+                type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
+            val root = win.root ?: continue
+            try {
+                val editable = findEditable(root)
+                if (editable != null) return editable
+            } finally {
+                root.recycle()
+            }
+        }
+        return null
+    }
+
+    /** 在节点树中查找第一个可编辑节点（兜底，适配 WebView/Compose 等输入框） */
+    private fun findEditable(n: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (n == null) return null
+        if (n.isEditable) return AccessibilityNodeInfo.obtain(n)
+        for (i in 0 until n.childCount) {
+            val c = n.getChild(i) ?: continue
+            val r = findEditable(c)
+            c.recycle()
+            if (r != null) return r
+        }
+        return null
     }
 
     private fun computeCursorPos(original: String, cfg: CatConfig): Int {
