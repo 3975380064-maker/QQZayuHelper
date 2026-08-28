@@ -133,7 +133,7 @@ object UpdateChecker {
         startDownload(context, 0)
     }
 
-    /** 从指定索引开始，预检并启动下载 */
+    /** 从指定索引开始，尝试下载 */
     private fun startDownload(context: Context, startIndex: Int) {
         // 先注册下载完成广播（每次尝试都注册新的）
         val receiver = object : BroadcastReceiver() {
@@ -189,14 +189,9 @@ object UpdateChecker {
             return
         }
 
-        // HEAD 预检找第一个可达的源
+        // 直接尝试 enqueue，不在主线程做网络预检
         for (i in startIndex until DOWNLOAD_PROXIES.size) {
             val url = DOWNLOAD_PROXIES[i].format(REPO_OWNER, REPO_NAME, APK_FILE)
-            if (!isReachable(url)) {
-                android.util.Log.w(TAG, "源不可达，跳过: ${DOWNLOAD_PROXIES[i]}")
-                continue
-            }
-
             try {
                 val request = DownloadManager.Request(Uri.parse(url))
                 request.setTitle("杂鱼助手更新")
@@ -216,7 +211,7 @@ object UpdateChecker {
             }
         }
 
-        // 全部不可达
+        // 全部失败
         unregisterDownloadReceiver(context)
         pendingOnComplete?.invoke(false)
         Toast.makeText(context, "所有下载源都不可用，请手动访问 GitHub 下载", Toast.LENGTH_LONG).show()
