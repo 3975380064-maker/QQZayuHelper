@@ -95,7 +95,12 @@ object UpdateChecker {
 
     private var downloadId: Long = -1L
     private var downloadStartTime: Long = 0L
+    private var downloadAttemptIndex = -1
+    private var downloadReceiver: BroadcastReceiver? = null
+    private var pendingOnStart: (() -> Unit)? = null
+    private var pendingOnComplete: ((Boolean) -> Unit)? = null
     private const val DOWNLOAD_TIMEOUT_MS = 120_000L  // 2 分钟无广播则超时重置
+    private const val REACHABLE_TIMEOUT_MS = 5000L     // HEAD 预检超时
 
     /**
      * 检查是否有新版本（同步阻塞，在后台线程调用）。
@@ -109,55 +114,90 @@ object UpdateChecker {
 
     /**
      * 下载最新 APK。
+     * 先对每个源做 HEAD 预检，不可达立即跳过；入队后若下载失败自动换下一个源重试。
      */
     fun downloadUpdate(context: Context, onStart: () -> Unit, onComplete: (Boolean) -> Unit) {
         // 检查是否有卡死的下载任务
         if (downloadId != -1L) {
             if (downloadStartTime > 0 && System.currentTimeMillis() - downloadStartTime > DOWNLOAD_TIMEOUT_MS) {
-                // 超时，重置下载状态
                 android.util.Log.w(TAG, "下载任务超时，重置")
                 downloadId = -1L
                 downloadStartTime = 0L
             } else {
-                // 已有下载任务
-                return
+                return  // 已有下载任务进行中
             }
         }
 
-        // 注册下载完成广播
+        pendingOnStart = onStart
+        pendingOnComplete = onComplete
+        startDownload(context, 0)
+    }
+
+    /** 从指定索引开始，预检并启动下载 */
+    private fun startDownload(context: Context, startIndex: Int) {
+        // 先注册下载完成广播（每次尝试都注册新的）
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-                if (id == downloadId) {
-                    ctx.unregisterReceiver(this)
+                if (id != downloadId) return
+                ctx.unregisterReceiver(this)
+                downloadReceiver = null
+
+                // 检查下载状态
+                val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                val query = DownloadManager.Query().setFilterById(id)
+                val cursor = dm.query(query)
+                var success = false
+                if (cursor.moveToFirst()) {
+                    val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        success = true
+                        val uriStr = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                        installApk(ctx, uriStr)
+                    }
+                }
+                cursor.close()
+
+                if (success) {
                     downloadId = -1L
                     downloadStartTime = 0L
-
-                    // 检查下载状态
-                    val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                    val query = DownloadManager.Query().setFilterById(id)
-                    val cursor = dm.query(query)
-                    var success = false
-                    if (cursor.moveToFirst()) {
-                        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            success = true
-                            val uriStr = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                            installApk(ctx, uriStr)
-                        }
+                    downloadAttemptIndex = -1
+                    pendingOnComplete?.invoke(true)
+                } else {
+                    // 下载失败，尝试下一个源
+                    android.util.Log.w(TAG, "下载失败（源索引 $downloadAttemptIndex），尝试下一个")
+                    downloadId = -1L
+                    downloadStartTime = 0L
+                    val nextIndex = downloadAttemptIndex + 1
+                    if (nextIndex < DOWNLOAD_PROXIES.size) {
+                        startDownload(ctx, nextIndex)
+                    } else {
+                        downloadAttemptIndex = -1
+                        pendingOnComplete?.invoke(false)
+                        Toast.makeText(ctx, "所有下载源都不可用，请手动访问 GitHub 下载", Toast.LENGTH_LONG).show()
                     }
-                    cursor.close()
-                    onComplete(success)
                 }
             }
         }
-        context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            Context.RECEIVER_NOT_EXPORTED)
+        downloadReceiver = receiver
+        try {
+            context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+                Context.RECEIVER_NOT_EXPORTED)
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "注册下载完成广播失败", e)
+            pendingOnComplete?.invoke(false)
+            return
+        }
 
-        // 遍历下载源尝试
-        for (proxy in DOWNLOAD_PROXIES) {
+        // HEAD 预检找第一个可达的源
+        for (i in startIndex until DOWNLOAD_PROXIES.size) {
+            val url = DOWNLOAD_PROXIES[i].format(REPO_OWNER, REPO_NAME, APK_FILE)
+            if (!isReachable(url)) {
+                android.util.Log.w(TAG, "源不可达，跳过: ${DOWNLOAD_PROXIES[i]}")
+                continue
+            }
+
             try {
-                val url = proxy.format(REPO_OWNER, REPO_NAME, APK_FILE)
                 val request = DownloadManager.Request(Uri.parse(url))
                 request.setTitle("杂鱼助手更新")
                 request.setDescription("正在下载新版本...")
@@ -168,15 +208,44 @@ object UpdateChecker {
                 val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                 downloadId = dm.enqueue(request)
                 downloadStartTime = System.currentTimeMillis()
-                onStart()
+                downloadAttemptIndex = i
+                pendingOnStart?.invoke()
                 return
             } catch (e: Exception) {
-                android.util.Log.w(TAG, "下载源失败: $proxy", e)
+                android.util.Log.w(TAG, "enqueue 失败: ${DOWNLOAD_PROXIES[i]}", e)
             }
         }
 
-        onComplete(false)
+        // 全部不可达
+        unregisterDownloadReceiver(context)
+        pendingOnComplete?.invoke(false)
         Toast.makeText(context, "所有下载源都不可用，请手动访问 GitHub 下载", Toast.LENGTH_LONG).show()
+    }
+
+    /** HEAD 预检：URL 是否可达 */
+    private fun isReachable(url: String): Boolean {
+        var connection: HttpURLConnection? = null
+        try {
+            connection = URL(url).openConnection() as HttpURLConnection
+            connection.requestMethod = "HEAD"
+            connection.connectTimeout = REACHABLE_TIMEOUT_MS.toInt()
+            connection.readTimeout = REACHABLE_TIMEOUT_MS.toInt()
+            connection.instanceFollowRedirects = true
+            val code = connection.responseCode
+            return code in 200..399
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "预检失败: $url", e)
+            return false
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun unregisterDownloadReceiver(context: Context) {
+        downloadReceiver?.let {
+            try { context.unregisterReceiver(it) } catch (_: Exception) {}
+        }
+        downloadReceiver = null
     }
 
     /**
