@@ -1,7 +1,6 @@
 package com.java.myapplication
 
 import android.accessibilityservice.AccessibilityService
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.os.PowerManager
 import android.util.Log
@@ -10,14 +9,13 @@ import android.view.accessibility.AccessibilityEvent
 /**
  * 无障碍服务，仅负责事件路由。
  * 实际业务逻辑委托给 TextReplaceEngine。
- * 借鉴 AutoTask 的分离思想：Service 薄层，Engine 厚层。
+ * 服务配置完全依赖 XML（accessibility_service_config.xml），不在代码中动态覆盖。
  */
 class QQAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "ZayuSvc"
-        private const val PKG_QQ = "com.tencent.mobileqq"
-        private const val PKG_QQI = "com.tencent.mobileqqi"
+        private const val WAKE_LOCK_TIMEOUT_MS = 30_000L
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
@@ -26,32 +24,21 @@ class QQAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        val info = AccessibilityServiceInfo()
-        info.eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED or
-                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-        info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-        info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-        info.notificationTimeout = 100
-        info.packageNames = arrayOf(PKG_QQ, PKG_QQI)
-        serviceInfo = info
+        // 不动态覆盖 serviceInfo —— 完全依赖 XML 配置
+        // 避免丢失 canRetrieveWindowContent 等关键属性
 
         // 初始化引擎
         engine = TextReplaceEngine(this)
 
-        // 获取唤醒锁
+        // 获取唤醒锁（超时自动释放，避免屏幕关闭后持续耗电）
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ZayuSvc:WakeLock")
-        wakeLock?.acquire()
-        Log.d(TAG, "唤醒锁已获取")
+        wakeLock?.acquire(WAKE_LOCK_TIMEOUT_MS)
+        Log.d(TAG, "唤醒锁已获取（超时 ${WAKE_LOCK_TIMEOUT_MS}ms）")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        wakeLock?.let {
-            if (it.isHeld) it.release()
-        }
-        wakeLock = null
+        releaseWakeLock()
         Log.d(TAG, "唤醒锁已释放")
         return super.onUnbind(intent)
     }
@@ -63,5 +50,12 @@ class QQAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         engine.onInterrupt()
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakeLock = null
     }
 }

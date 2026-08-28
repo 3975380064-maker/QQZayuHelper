@@ -14,6 +14,7 @@ class CatConfig {
     var niReplacement: String = "主人"
     var meowSuffix: String = "喵"
     var idleDelayMs: Int = 1000
+    var customRules: Array<String> = emptyArray()  // 每项格式 "原词=替换词"
 
     companion object {
         private const val PREFS_NAME = "cat_config"
@@ -28,6 +29,7 @@ class CatConfig {
         private const val KEY_NI_REPLACEMENT = "ni_replacement"
         private const val KEY_MEOW_SUFFIX = "meow_suffix"
         private const val KEY_IDLE_DELAY = "idle_delay"
+        private const val KEY_CUSTOM_RULES = "custom_rules"
 
         const val REAL_TIME_MODE = "real_time"
         const val PUNCTUATION_MODE = "punctuation"
@@ -76,6 +78,13 @@ class CatConfig {
             } else {
                 raw.split("\n").filter { it.isNotBlank() }.toTypedArray()
             }
+
+            val rulesRaw = prefs.getString(KEY_CUSTOM_RULES, "")
+            config.customRules = if (rulesRaw.isNullOrEmpty()) {
+                emptyArray()
+            } else {
+                rulesRaw.split("\n").filter { it.isNotBlank() }.toTypedArray()
+            }
             return config
         }
 
@@ -93,6 +102,7 @@ class CatConfig {
                 .putString(KEY_MEOW_SUFFIX, config.meowSuffix)
                 .putInt(KEY_IDLE_DELAY, config.idleDelayMs)
                 .putString(KEY_CUSTOM_EMOTICONS, config.customEmoticons.joinToString("\n"))
+                .putString(KEY_CUSTOM_RULES, config.customRules.joinToString("\n"))
                 .apply()
         }
     }

@@ -21,11 +21,10 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     companion object {
         private const val TAG = "QQCatSvc"
         private const val ID_INPUT = "com.tencent.mobileqq:id/input"
-        private const val PLACEHOLDER = "\ue000BM\ue001"
+        private const val PLACEHOLDER_WO = "\ue000"
+        private const val PLACEHOLDER_NI = "\ue001"
+        private const val CUSTOM_RULE_PLACEHOLDER_PREFIX = "\ue010"
         private const val ECHO_WINDOW_MS = 800L
-        private const val ROOT_RETRY_DELAY_MS = 80L
-        private const val ROOT_RETRY_MAX = 3
-        private const val WATCHDOG_TIMEOUT_MS = 5000L
     }
 
     var userOriginal = ""
@@ -39,16 +38,17 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     private val handler = Handler(Looper.getMainLooper())
     private val idleTask = Runnable { doProcess() }
     private var processingStartTime = 0L
+    private var hasPendingIdleTask = false
 
     private val watchdogTask = object : Runnable {
         override fun run() {
             if (processing) {
                 val elapsed = System.currentTimeMillis() - processingStartTime
-                if (elapsed >= WATCHDOG_TIMEOUT_MS) {
+                if (elapsed >= 5000L) {
                     Log.w(TAG, "watchdog: processing 卡死 ${elapsed}ms，强制重置")
                     processing = false
                 } else {
-                    handler.postDelayed(this, WATCHDOG_TIMEOUT_MS - elapsed)
+                    handler.postDelayed(this, 5000L - elapsed)
                 }
             }
         }
@@ -68,8 +68,12 @@ class TextReplaceEngine(private val service: AccessibilityService) {
                     currentPkg = pkg
                     Log.d(TAG, "包名变化，重置状态: $pkg")
                 } else {
+                    // QQ 内切换聊天窗口 —— 重置 lastSet 避免误匹配
                     lastTextLength = 0
-                    Log.d(TAG, "QQ 内部切换，保留状态")
+                    lastSet = ""
+                    userOriginal = ""
+                    lastWrittenText = ""
+                    Log.d(TAG, "QQ 内部切换，重置 lastSet")
                 }
             }
 
@@ -81,14 +85,15 @@ class TextReplaceEngine(private val service: AccessibilityService) {
                 val currentText = cs.joinToString("")
                 val currentLen = currentText.length
                 if (currentLen < lastTextLength) {
+                    // 删除文本：取消 pending idleTask，更新长度
                     lastTextLength = currentLen
+                    cancelPendingIdleTask()
                     return
                 }
                 lastTextLength = currentLen
 
                 if (mode == CatConfig.REAL_TIME_MODE) {
-                    handler.removeCallbacks(idleTask)
-                    handler.postDelayed(idleTask, cfg.idleDelayMs.toLong())
+                    scheduleIdleTask(cfg.idleDelayMs.toLong())
                 } else {
                     val raw = currentText.trim()
                     if (raw.isNotEmpty() && isPunctuationEnding(raw)) {
@@ -100,8 +105,22 @@ class TextReplaceEngine(private val service: AccessibilityService) {
         }
     }
 
+    private fun cancelPendingIdleTask() {
+        if (hasPendingIdleTask) {
+            handler.removeCallbacks(idleTask)
+            hasPendingIdleTask = false
+        }
+    }
+
+    private fun scheduleIdleTask(delayMs: Long) {
+        cancelPendingIdleTask()
+        handler.postDelayed(idleTask, delayMs)
+        hasPendingIdleTask = true
+    }
+
     fun resetState() {
         processing = false
+        cancelPendingIdleTask()
         userOriginal = ""
         lastSet = ""
         lastWriteTime = 0L
@@ -111,6 +130,7 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
     fun onInterrupt() {
         processing = false
+        cancelPendingIdleTask()
     }
 
     /** 核心处理流程 */
@@ -118,13 +138,13 @@ class TextReplaceEngine(private val service: AccessibilityService) {
         if (processing) return
         processing = true
         processingStartTime = System.currentTimeMillis()
-        handler.postDelayed(watchdogTask, WATCHDOG_TIMEOUT_MS)
+        handler.postDelayed(watchdogTask, 5000L)
 
         try {
             val cfg = loadConfig()
             if (!cfg.enabled) return
 
-            val root = findRootWithRetry() ?: return
+            val root = service.rootInActiveWindow ?: return
             try {
                 val inp = findNodeById(root, ID_INPUT) ?: return
                 try {
@@ -159,17 +179,14 @@ class TextReplaceEngine(private val service: AccessibilityService) {
                         }
                     }
 
-                    val isRealtime = cfg.processingMode == CatConfig.REAL_TIME_MODE
-
-                    if (!isRealtime && lastSet.isEmpty()) {
-                        userOriginal = stripAll(raw, cfg)
-                    } else if (lastSet.isNotEmpty() && raw.startsWith(lastSet)) {
+                    // 更新 userOriginal
+                    if (lastSet.isNotEmpty() && raw.startsWith(lastSet)) {
+                        // 用户在末尾继续输入
                         val added = raw.substring(lastSet.length)
                         userOriginal += added
-                    } else if (lastSet.isEmpty()) {
-                        userOriginal = stripAll(raw, cfg)
                     } else {
-                        userOriginal = stripAll(raw, cfg)
+                        // 文本不匹配预期（用户修改/删除/切换窗口），重新剥离
+                        userOriginal = stripEngineOutput(raw, cfg)
                     }
 
                     if (userOriginal.isEmpty()) return
@@ -182,8 +199,8 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
                     Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
 
-                    val cursorPos = computeCursorPos(userOriginal, cfg)
-                    val ok = setTextOrFallback(inp, target, cursorPos)
+                    // 光标始终放在末尾，避免打断输入法
+                    val ok = setTextOrFallback(inp, target, target.length)
                     if (ok) {
                         lastSet = target
                         lastWrittenText = target
@@ -198,41 +215,80 @@ class TextReplaceEngine(private val service: AccessibilityService) {
         } finally {
             processing = false
             handler.removeCallbacks(watchdogTask)
+            hasPendingIdleTask = false
         }
     }
 
-    private fun findRootWithRetry(): AccessibilityNodeInfo? {
-        var retries = 0
-        while (retries < ROOT_RETRY_MAX) {
-            val root = service.rootInActiveWindow
-            if (root != null) return root
-            retries++
-            if (retries < ROOT_RETRY_MAX) {
-                try { Thread.sleep(ROOT_RETRY_DELAY_MS) } catch (_: InterruptedException) { break }
+    /**
+     * 逆向剥离引擎输出的附加内容，还原用户原始输入。
+     * 只剥离引擎已知追加的部分（句尾后缀、表情、替换词），不做全局替换。
+     */
+    private fun stripEngineOutput(text: String, cfg: CatConfig): String {
+        var result = text
+
+        // 1. 剥离句尾表情（只从末尾剥离一次，带空格情况）
+        if (cfg.enableRandomEmoticon) {
+            val emotes = cfg.getActiveEmoticons().sortedByDescending { it.length }
+            for (em in emotes) {
+                if (result.endsWith(" $em")) {
+                    result = result.substring(0, result.length - em.length - 1).trim()
+                    break
+                }
+                if (result.endsWith(em)) {
+                    result = result.substring(0, result.length - em.length).trim()
+                    break
+                }
             }
         }
-        return service.rootInActiveWindow
+
+        // 2. 剥离句尾后缀（只从末尾剥离一次）
+        if (cfg.enableMeow && result.endsWith(cfg.meowSuffix)) {
+            result = result.substring(0, result.length - cfg.meowSuffix.length).trim()
+        }
+
+        // 3. 反转自定义替换规则（用唯一占位符避免冲突）
+        // 例：说=曰 和 话=曰 都映射到「曰」，逆序时先用唯一占位符区分再还原
+        if (cfg.customRules.isNotEmpty()) {
+            val reversePlaceholders = mutableMapOf<String, String>()
+            cfg.customRules.forEachIndexed { index, rule ->
+                val parts = rule.split("=", limit = 2)
+                if (parts.size == 2 && parts[0].isNotBlank()) {
+                    val ph = CUSTOM_RULE_PLACEHOLDER_PREFIX + index.toChar()
+                    reversePlaceholders[ph] = parts[0]
+                    result = result.replace(parts[1], ph)
+                }
+            }
+            for ((ph, original) in reversePlaceholders) {
+                result = result.replace(ph, original)
+            }
+        }
+
+        // 4. 反转替换词（用占位符避免交叉污染）
+        if (cfg.enableWoToBenmiao && cfg.woReplacement.isNotEmpty()) {
+            result = result.replace(cfg.woReplacement, PLACEHOLDER_WO)
+        }
+        if (cfg.enableNiToZhuren && cfg.niReplacement.isNotEmpty()) {
+            result = result.replace(cfg.niReplacement, PLACEHOLDER_NI)
+        }
+        result = result.replace(PLACEHOLDER_WO, "我")
+        result = result.replace(PLACEHOLDER_NI, "你")
+
+        return result.trim()
     }
 
-    private fun computeCursorPos(original: String, cfg: CatConfig): Int {
-        var pos = original.length
-        if (cfg.enableWoToBenmiao) {
-            val woCount = original.count { it == '我' }
-            pos += woCount * (cfg.woReplacement.length - 1)
-        }
-        if (cfg.enableNiToZhuren) {
-            val niCount = original.count { it == '你' }
-            pos += niCount * (cfg.niReplacement.length - 1)
-        }
-        return pos
-    }
-
+    /**
+     * 设置文本或剪贴板 fallback。
+     * 光标始终放在末尾（target.length），避免打断输入法。
+     */
     private fun setTextOrFallback(node: AccessibilityNodeInfo, text: String, cursorPos: Int): Boolean {
-        if (setTextBeforeMeow(node, text, cursorPos)) return true
+        if (setTextWithSelection(node, text, cursorPos)) return true
 
         Log.w(TAG, "SET_TEXT 失败，尝试剪贴板粘贴 fallback")
         return try {
             val clipboard = service.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            // 保存用户原剪贴板内容
+            val originalClip = clipboard.primaryClip
+
             val clip = ClipData.newPlainText("label", text)
             clipboard.setPrimaryClip(clip)
 
@@ -242,7 +298,12 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
             node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
 
-            clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+            // 恢复用户剪贴板
+            if (originalClip != null) {
+                clipboard.setPrimaryClip(originalClip)
+            } else {
+                clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+            }
             Log.d(TAG, "剪贴板粘贴 fallback 成功")
             true
         } catch (e: Exception) {
@@ -251,7 +312,7 @@ class TextReplaceEngine(private val service: AccessibilityService) {
         }
     }
 
-    private fun setTextBeforeMeow(node: AccessibilityNodeInfo, text: String, cursorPos: Int): Boolean {
+    private fun setTextWithSelection(node: AccessibilityNodeInfo, text: String, cursorPos: Int): Boolean {
         if (node == null) return false
         return try {
             val b = Bundle()
@@ -265,7 +326,7 @@ class TextReplaceEngine(private val service: AccessibilityService) {
             }
             ok
         } catch (e: Exception) {
-            Log.w(TAG, "setTextBeforeMeow 异常", e)
+            Log.w(TAG, "setTextWithSelection 异常", e)
             false
         }
     }
@@ -287,28 +348,6 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     private fun isPunctuationEnding(s: String): Boolean {
         if (s.isNullOrEmpty()) return false
         val last = s.last()
-        return last in charArrayOf('。', '！', '!', '？', '?', ' ')
-    }
-
-    private fun stripAll(text: String, cfg: CatConfig): String {
-        if (text.isNullOrEmpty()) return ""
-        var result = text
-        val emotes = cfg.getActiveEmoticons()
-        val sorted = emotes.sortedByDescending { it.length }
-        for (em in sorted) {
-            if (em.isEmpty()) continue
-            while (true) {
-                val idx = result.indexOf(em)
-                if (idx < 0) break
-                var st = idx
-                if (st > 0 && result[st - 1] == ' ') st -= 1
-                result = result.substring(0, st) + result.substring(idx + em.length)
-            }
-        }
-        result = result.replace(Regex("\\s*[\\p{S}\\p{So}\\p{Sm}\\p{Sk}\\p{P}]{3,}\\s*"), " ")
-        result = result.replace(cfg.woReplacement, PLACEHOLDER)
-        result = result.replace(cfg.meowSuffix, "")
-        result = result.replace(PLACEHOLDER, cfg.woReplacement)
-        return result.trim()
+        return last in charArrayOf('。', '！', '!', '？', '?')
     }
 }

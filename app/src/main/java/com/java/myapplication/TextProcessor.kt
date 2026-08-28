@@ -69,6 +69,8 @@ object TextProcessor {
         if (config.enableNiToZhuren) {
             text = text.replace("你", config.niReplacement)
         }
+        // 自定义替换规则
+        text = applyCustomRules(text, config)
         if (config.enableMeow) {
             text = addMeow(text, config.meowSuffix)
         }
@@ -79,5 +81,21 @@ object TextProcessor {
             }
         }
         return text
+    }
+
+    /**
+     * 应用自定义替换规则。
+     * 每条规则格式 "原词=替换词"，按配置顺序逐条替换。
+     */
+    private fun applyCustomRules(text: String, config: CatConfig): String {
+        if (config.customRules.isEmpty()) return text
+        var result = text
+        for (rule in config.customRules) {
+            val parts = rule.split("=", limit = 2)
+            if (parts.size == 2 && parts[0].isNotBlank()) {
+                result = result.replace(parts[0], parts[1])
+            }
+        }
+        return result
     }
 }

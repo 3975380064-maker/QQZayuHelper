@@ -94,6 +94,8 @@ object UpdateChecker {
     )
 
     private var downloadId: Long = -1L
+    private var downloadStartTime: Long = 0L
+    private const val DOWNLOAD_TIMEOUT_MS = 120_000L  // 2 分钟无广播则超时重置
 
     /**
      * 检查是否有新版本（同步阻塞，在后台线程调用）。
@@ -109,9 +111,17 @@ object UpdateChecker {
      * 下载最新 APK。
      */
     fun downloadUpdate(context: Context, onStart: () -> Unit, onComplete: (Boolean) -> Unit) {
+        // 检查是否有卡死的下载任务
         if (downloadId != -1L) {
-            // 已有下载任务
-            return
+            if (downloadStartTime > 0 && System.currentTimeMillis() - downloadStartTime > DOWNLOAD_TIMEOUT_MS) {
+                // 超时，重置下载状态
+                android.util.Log.w(TAG, "下载任务超时，重置")
+                downloadId = -1L
+                downloadStartTime = 0L
+            } else {
+                // 已有下载任务
+                return
+            }
         }
 
         // 注册下载完成广播
@@ -121,24 +131,28 @@ object UpdateChecker {
                 if (id == downloadId) {
                     ctx.unregisterReceiver(this)
                     downloadId = -1L
-                    onComplete(true)
-                    // 启动安装
+                    downloadStartTime = 0L
+
+                    // 检查下载状态
                     val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                     val query = DownloadManager.Query().setFilterById(id)
                     val cursor = dm.query(query)
+                    var success = false
                     if (cursor.moveToFirst()) {
-                        val status = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
+                        val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                         if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            val uriStr = cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI))
+                            success = true
+                            val uriStr = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
                             installApk(ctx, uriStr)
                         }
                     }
                     cursor.close()
+                    onComplete(success)
                 }
             }
         }
         context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            Context.RECEIVER_EXPORTED)
+            Context.RECEIVER_NOT_EXPORTED)
 
         // 遍历下载源尝试
         for (proxy in DOWNLOAD_PROXIES) {
@@ -148,11 +162,12 @@ object UpdateChecker {
                 request.setTitle("杂鱼助手更新")
                 request.setDescription("正在下载新版本...")
                 request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "ZayuHelper_update.apk")
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "ZayuHelper/ZayuHelper_update.apk")
                 request.setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
 
                 val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                 downloadId = dm.enqueue(request)
+                downloadStartTime = System.currentTimeMillis()
                 onStart()
                 return
             } catch (e: Exception) {
@@ -189,37 +204,64 @@ object UpdateChecker {
     }
 
     private fun installApk(context: Context, uriStr: String) {
+        // 注册 MY_PACKAGE_REPLACED 广播：覆盖安装完成后删除源文件
+        // 自更新（覆盖安装）触发的是 ACTION_MY_PACKAGE_REPLACED，不是 PACKAGE_ADDED
+        val installReceiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                ctx.unregisterReceiver(this)
+                deleteDownloadedFile(context)
+            }
+        }
         try {
-            val uri = Uri.parse(uriStr)
-            // content:// 或 file:// URI 直接传给系统安装器
-            // 对 file:// 需要加 FLAG_GRANT_READ_URI_PERMISSION
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                if (uri.scheme == "file") {
+            context.registerReceiver(installReceiver,
+                IntentFilter(Intent.ACTION_MY_PACKAGE_REPLACED),
+                Context.RECEIVER_NOT_EXPORTED)
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "注册安装完成广播失败", e)
+            return
+        }
+
+        try {
+            // 直接走 FileProvider，避免 file:// URI 在 Android 7.0+ 抛异常
+            val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ZayuHelper/ZayuHelper_update.apk")
+            if (file.exists()) {
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-            }
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            android.util.Log.w(TAG, "安装失败", e)
-            // 兜底：用已知路径 + FileProvider
-            try {
-                val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ZayuHelper_update.apk")
-                if (file.exists()) {
-                    val fallbackUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(fallbackUri, "application/vnd.android.package-archive")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } else {
+                // 兜底：用 DownloadManager 返回的 URI
+                val uri = Uri.parse(uriStr)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (uri.scheme == "file") {
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(intent)
-                    return
                 }
-            } catch (e2: Exception) {
-                android.util.Log.w(TAG, "兜底安装也失败", e2)
+                context.startActivity(intent)
             }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "安装失败", e)
             Toast.makeText(context, "安装失败，请手动打开下载目录安装", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * 删除已下载的 APK 文件。
+     */
+    private fun deleteDownloadedFile(context: Context) {
+        try {
+            val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ZayuHelper/ZayuHelper_update.apk")
+            if (file.exists()) {
+                file.delete()
+                android.util.Log.i(TAG, "已删除下载的 APK 文件")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "删除 APK 文件失败", e)
         }
     }
 
@@ -236,9 +278,10 @@ object UpdateChecker {
      */
     private fun fetchLatestVersion(): String? {
         for (proxy in RAW_PROXIES) {
+            var connection: HttpURLConnection? = null
             try {
                 val url = proxy.format(REPO_OWNER, REPO_NAME)
-                val connection = URL(url).openConnection() as HttpURLConnection
+                connection = URL(url).openConnection() as HttpURLConnection
                 connection.connectTimeout = 8000
                 connection.readTimeout = 8000
                 connection.instanceFollowRedirects = true
@@ -256,9 +299,10 @@ object UpdateChecker {
                         return match.groupValues[1]
                     }
                 }
-                connection.disconnect()
             } catch (e: Exception) {
                 android.util.Log.w(TAG, "RAW 源失败: $proxy", e)
+            } finally {
+                connection?.disconnect()
             }
         }
         return null

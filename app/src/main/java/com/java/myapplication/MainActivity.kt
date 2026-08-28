@@ -5,264 +5,351 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.Gravity
 import android.view.View
 import android.view.accessibility.AccessibilityManager
 import android.widget.*
+import androidx.cardview.widget.CardView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.radiobutton.MaterialRadioButton
+import com.google.android.material.switchmaterial.SwitchMaterial
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 
 class MainActivity : Activity() {
 
-    private lateinit var cbEnabled: CheckBox
-    private lateinit var cbMeow: CheckBox
-    private lateinit var cbWoToBenmiao: CheckBox
-    private lateinit var cbNiToZhuren: CheckBox
-    private lateinit var cbEmoticon: CheckBox
-    private lateinit var rbRealtime: RadioButton
-    private lateinit var rbPunctuation: RadioButton
-    private lateinit var etCustomEmoticons: EditText
+    private lateinit var switchEnabled: SwitchMaterial
+    private lateinit var switchMeow: SwitchMaterial
+    private lateinit var switchWoToBenmiao: SwitchMaterial
+    private lateinit var switchNiToZhuren: SwitchMaterial
+    private lateinit var switchEmoticon: SwitchMaterial
+    private lateinit var rbRealtime: MaterialRadioButton
+    private lateinit var rbPunctuation: MaterialRadioButton
+    private lateinit var etCustomEmoticons: TextInputEditText
+    private lateinit var etCustomRules: TextInputEditText
     private lateinit var tvStatus: TextView
-    private lateinit var btnOpenSettings: Button
-    private lateinit var etWoReplacement: EditText
-    private lateinit var etNiReplacement: EditText
-    private lateinit var etMeowSuffix: EditText
-    private lateinit var etIdleDelay: EditText
-    private lateinit var btnBatteryOpt: Button
-    private lateinit var btnWakeLock: Button
-    private lateinit var btnCheckUpdate: Button
+    private lateinit var btnOpenSettings: MaterialButton
+    private lateinit var etWoReplacement: TextInputEditText
+    private lateinit var etNiReplacement: TextInputEditText
+    private lateinit var etMeowSuffix: TextInputEditText
+    private lateinit var etIdleDelay: TextInputEditText
+    private lateinit var btnBatteryOpt: MaterialButton
+    private lateinit var btnAutoStart: MaterialButton
+    private lateinit var btnCheckUpdate: MaterialButton
     private lateinit var tvVersion: TextView
+
+    // 颜色常量
+    private val colorBackground = 0xFFF5F5F7.toInt()
+    private val colorCard = 0xFFFFFFFF.toInt()
+    private val colorPrimary = 0xFF007AFF.toInt()
+    private val colorTextPrimary = 0xFF1C1C1E.toInt()
+    private val colorTextSecondary = 0xFF8E8E93.toInt()
+    private val colorDivider = 0xFFE5E5EA.toInt()
+    private val colorSuccess = 0xFF34C759.toInt()
+    private val colorWarning = 0xFFFF3B30.toInt()
+
+    private var isLoading = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 版本号
         val versionName = try {
             packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
         } catch (e: Exception) { "?" }
 
-        val scrollView = ScrollView(this)
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
+        val scrollView = ScrollView(this).apply {
+            setBackgroundColor(colorBackground)
         }
 
-        // ── 标题栏 ──
-        val titleRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, 20)
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 48)
         }
-        titleRow.addView(TextView(this).apply {
+
+        // ── 顶部标题区 ──
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(8, 16, 8, 24)
+        }
+        val tvTitle = TextView(this).apply {
             text = "杂鱼助手"
-            textSize = 22f
-            setTextColor(0xFF222222.toInt())
+            textSize = 28f
+            setTextColor(colorTextPrimary)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        })
+        }
         tvVersion = TextView(this).apply {
             text = "v$versionName"
-            textSize = 12f
-            setTextColor(0xFF999999.toInt())
-        }
-        titleRow.addView(tvVersion)
-        layout.addView(titleRow)
-
-        // ── 服务状态 ──
-        tvStatus = TextView(this).apply {
-            textSize = 15f
-            setPadding(0, 0, 0, 12)
-        }
-        layout.addView(tvStatus)
-
-        btnOpenSettings = Button(this).apply {
-            text = "前往系统设置开启无障碍"
-            setOnClickListener { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-        }
-        layout.addView(btnOpenSettings)
-
-        // ── 分隔线 ──
-        layout.addView(divider())
-
-        // ── 总开关 ──
-        cbEnabled = CheckBox(this).apply {
-            text = "启用文字替换功能"
-            isChecked = true
-            setOnCheckedChangeListener { _, _ -> autoSave() }
-        }
-        layout.addView(cbEnabled)
-
-        // ── 分隔线 ──
-        layout.addView(divider())
-
-        // ── 权限与续航 ──
-        layout.addView(sectionTitle("权限与续航"))
-
-        btnBatteryOpt = Button(this).apply {
-            text = "申请电池优化白名单"
-            setOnClickListener { requestBatteryOptimization() }
-        }
-        layout.addView(btnBatteryOpt)
-
-        btnWakeLock = Button(this).apply {
-            text = "保持唤醒（屏幕关闭不暂停）"
-            setOnClickListener { requestWakeLock() }
-        }
-        layout.addView(btnWakeLock)
-
-        // ── 分隔线 ──
-        layout.addView(divider())
-
-        // ── 替换规则 ──
-        layout.addView(sectionTitle("替换规则"))
-
-        cbMeow = CheckBox(this).apply {
-            text = "句尾加后缀"
-            isChecked = true
-            setOnCheckedChangeListener { _, _ -> autoSave() }
-        }
-        layout.addView(cbMeow)
-
-        layout.addView(labelText("句尾后缀（默认：喵）"))
-        etMeowSuffix = EditText(this).apply {
-            hint = "喵、唔喵、咩..."
-            setPadding(32, 8, 32, 8)
             textSize = 14f
-        }
-        layout.addView(etMeowSuffix)
-
-        layout.addView(spacer(4))
-
-        cbWoToBenmiao = CheckBox(this).apply {
-            text = "我 →"
-            setOnCheckedChangeListener { _, _ -> autoSave() }
-        }
-        layout.addView(cbWoToBenmiao)
-
-        etWoReplacement = EditText(this).apply {
-            hint = "本喵、咱、吾辈、人家..."
-            setPadding(48, 8, 32, 8)
-            textSize = 14f
-        }
-        layout.addView(etWoReplacement)
-
-        layout.addView(spacer(4))
-
-        cbNiToZhuren = CheckBox(this).apply {
-            text = "你 →"
-            setOnCheckedChangeListener { _, _ -> autoSave() }
-        }
-        layout.addView(cbNiToZhuren)
-
-        etNiReplacement = EditText(this).apply {
-            hint = "主人、杂鱼、笨蛋主人..."
-            setPadding(48, 8, 32, 8)
-            textSize = 14f
-        }
-        layout.addView(etNiReplacement)
-
-        layout.addView(spacer(4))
-
-        cbEmoticon = CheckBox(this).apply {
-            text = "随机添加后缀表情"
-            setOnCheckedChangeListener { _, _ -> autoSave() }
-        }
-        layout.addView(cbEmoticon)
-
-        // ── 分隔线 ──
-        layout.addView(divider())
-
-        // ── 处理模式 ──
-        layout.addView(sectionTitle("处理模式"))
-
-        val radioGroup = RadioGroup(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setOnCheckedChangeListener { _, _ -> autoSave() }
-        }
-        rbRealtime = RadioButton(this).apply { text = "智能模式"; id = 1 }
-        rbPunctuation = RadioButton(this).apply { text = "标点模式"; id = 2 }
-        radioGroup.addView(rbRealtime)
-        radioGroup.addView(rbPunctuation)
-        layout.addView(radioGroup)
-
-        layout.addView(labelText("空闲延迟（秒，智能模式）："))
-        etIdleDelay = EditText(this).apply {
-            hint = "1"
-            textSize = 14f
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            setPadding(32, 8, 32, 8)
-        }
-        layout.addView(etIdleDelay)
-
-        // ── 分隔线 ──
-        layout.addView(divider())
-
-        // ── 自定义表情 ──
-        layout.addView(sectionTitle("自定义表情"))
-
-        etCustomEmoticons = EditText(this).apply {
-            hint = "每行一个，留空使用默认"
-            setLines(4); setMinLines(4); textSize = 14f
-            setPadding(0, 8, 0, 8)
-        }
-        layout.addView(etCustomEmoticons)
-
-        // ── 分隔线 ──
-        layout.addView(divider())
-
-        // ── 更新 ──
-        layout.addView(sectionTitle("更新"))
-
-        btnCheckUpdate = Button(this).apply {
-            text = "检查更新"
-            setOnClickListener { checkForUpdate() }
-        }
-        layout.addView(btnCheckUpdate)
-
-        // ── 分隔线 ──
-        layout.addView(divider())
-
-        // ── 保存按钮 ──
-        layout.addView(Button(this).apply {
-            text = "保存设置"
-            setOnClickListener { saveConfig() }
-        })
-
-        layout.addView(TextView(this).apply {
-            text = "修改勾选后自动保存，无需手动保存"
-            textSize = 12f
-            setTextColor(0xFF999999.toInt())
-            setPadding(0, 8, 0, 8)
-        })
-
-        // ── 底部信息 ──
-        layout.addView(spacer(8))
-
-        layout.addView(TextView(this).apply {
-            text = "作者：喵喵喵"
-            textSize = 13f
-            setTextColor(0xFF666666.toInt())
-            gravity = android.view.Gravity.CENTER_HORIZONTAL
-            setPadding(0, 8, 0, 4)
-        })
-
-        val tvGithub = TextView(this)
-        tvGithub.text = "https://github.com/3975380064-maker/QQZayuHelper"
-        tvGithub.textSize = 12f
-        tvGithub.setTextColor(0xFF1976D2.toInt())
-        tvGithub.gravity = android.view.Gravity.CENTER_HORIZONTAL
-        tvGithub.setPadding(0, 0, 0, 32)
-        tvGithub.setOnClickListener {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/3975380064-maker/QQZayuHelper")))
-            } catch (e: Exception) {
-                Toast.makeText(this, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+            setTextColor(colorTextSecondary)
+            setPadding(8, 4, 8, 4)
+            background = GradientDrawable().apply {
+                cornerRadius = 12f
+                setColor(0xFFE5E5EA.toInt())
             }
         }
-        layout.addView(tvGithub)
+        header.addView(tvTitle)
+        header.addView(tvVersion)
+        rootLayout.addView(header)
 
-        scrollView.addView(layout)
+        // ── 状态卡片 ──
+        val statusCard = createCard()
+        val statusLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 20, 24, 20)
+        }
+        val statusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val statusDot = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(10, 10).apply {
+                setMargins(0, 0, 12, 0)
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(colorWarning)
+            }
+        }
+        tvStatus = TextView(this).apply {
+            text = "服务状态：未开启"
+            textSize = 15f
+            setTextColor(colorTextPrimary)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        statusRow.addView(statusDot)
+        statusRow.addView(tvStatus)
+
+        btnOpenSettings = createOutlineButton("前往系统设置开启无障碍") {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        btnOpenSettings.visibility = View.GONE
+
+        statusLayout.addView(statusRow)
+        statusLayout.addView(spacerView(12))
+        statusLayout.addView(btnOpenSettings)
+        statusCard.addView(statusLayout)
+        rootLayout.addView(statusCard)
+
+        // ── 主开关卡片 ──
+        val mainSwitchCard = createCard()
+        val mainSwitchLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 16, 24, 16)
+        }
+        switchEnabled = createSwitch("启用文字替换功能", true)
+        mainSwitchLayout.addView(switchEnabled)
+        mainSwitchCard.addView(mainSwitchLayout)
+        rootLayout.addView(mainSwitchCard)
+
+        // ── 权限与续航 ──
+        rootLayout.addView(createSectionTitle("权限与续航"))
+        val batteryCard = createCard()
+        val batteryLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(8, 8, 8, 8)
+        }
+        btnBatteryOpt = createTextButton("申请电池优化白名单") { requestBatteryOptimization() }
+        btnAutoStart = createTextButton("管理自启动") { requestAutoStart() }
+        batteryLayout.addView(btnBatteryOpt)
+        batteryLayout.addView(createThinDivider())
+        batteryLayout.addView(btnAutoStart)
+        batteryCard.addView(batteryLayout)
+        rootLayout.addView(batteryCard)
+
+        // ── 替换规则 ──
+        rootLayout.addView(createSectionTitle("替换规则"))
+        val replaceCard = createCard()
+        val replaceLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(8, 8, 8, 8)
+        }
+
+        switchMeow = createSwitch("句尾添加后缀", true)
+        val (meowEdit, meowLayout) = createTextInputRow("句尾后缀", "喵、唔喵、咩...")
+        etMeowSuffix = meowEdit
+
+        switchWoToBenmiao = createSwitch("替换「我」", true)
+        val (woEdit, woLayout) = createTextInputRow("替换为", "本喵、咱、吾辈、人家...")
+        etWoReplacement = woEdit
+
+        switchNiToZhuren = createSwitch("替换「你」", true)
+        val (niEdit, niLayout) = createTextInputRow("替换为", "主人、杂鱼、笨蛋主人...")
+        etNiReplacement = niEdit
+
+        switchEmoticon = createSwitch("随机添加后缀表情", true)
+
+        replaceLayout.addView(switchMeow)
+        replaceLayout.addView(meowLayout)
+        replaceLayout.addView(createThinDivider())
+        replaceLayout.addView(switchWoToBenmiao)
+        replaceLayout.addView(woLayout)
+        replaceLayout.addView(createThinDivider())
+        replaceLayout.addView(switchNiToZhuren)
+        replaceLayout.addView(niLayout)
+        replaceLayout.addView(createThinDivider())
+        replaceLayout.addView(switchEmoticon)
+        replaceCard.addView(replaceLayout)
+        rootLayout.addView(replaceCard)
+
+        // ── 处理模式 ──
+        rootLayout.addView(createSectionTitle("处理模式"))
+        val modeCard = createCard()
+        val modeLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 16, 24, 16)
+        }
+        val radioGroup = RadioGroup(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setOnCheckedChangeListener { _, _ ->
+                if (!isLoading) autoSave()
+            }
+        }
+        rbRealtime = MaterialRadioButton(this).apply {
+            text = "智能模式"
+            textSize = 15f
+            setTextColor(colorTextPrimary)
+            id = 1
+        }
+        rbPunctuation = MaterialRadioButton(this).apply {
+            text = "标点模式"
+            textSize = 15f
+            setTextColor(colorTextPrimary)
+            id = 2
+        }
+        radioGroup.addView(rbRealtime)
+        radioGroup.addView(rbPunctuation)
+
+        val (delayEdit, delayLayout) = createTextInputRow("空闲延迟（毫秒，仅智能模式）", "1000")
+        etIdleDelay = delayEdit
+        etIdleDelay.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+
+        modeLayout.addView(radioGroup)
+        modeLayout.addView(spacerView(12))
+        modeLayout.addView(delayLayout)
+        modeCard.addView(modeLayout)
+        rootLayout.addView(modeCard)
+
+        // ── 自定义表情 ──
+        rootLayout.addView(createSectionTitle("自定义表情"))
+        val emoticonCard = createCard()
+        val emoticonLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 16, 24, 16)
+        }
+        val emoticonLabel = TextView(this).apply {
+            text = "每行一个，留空则使用默认表情"
+            textSize = 13f
+            setTextColor(colorTextSecondary)
+            setPadding(0, 0, 0, 8)
+        }
+        etCustomEmoticons = TextInputEditText(this).apply {
+            setLines(4)
+            minLines = 4
+            textSize = 15f
+            setTextColor(colorTextPrimary)
+            background = null
+            gravity = Gravity.TOP
+            setPadding(0, 8, 0, 8)
+        }
+        emoticonLayout.addView(emoticonLabel)
+        emoticonLayout.addView(etCustomEmoticons, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        emoticonCard.addView(emoticonLayout)
+        rootLayout.addView(emoticonCard)
+
+        // ── 自定义替换规则 ──
+        rootLayout.addView(createSectionTitle("自定义替换规则"))
+        val rulesCard = createCard()
+        val rulesLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 16, 24, 16)
+        }
+        val rulesLabel = TextView(this).apply {
+            text = "每行一条，格式：原词=替换词\n例如：说=曰、吗=嘛"
+            textSize = 13f
+            setTextColor(colorTextSecondary)
+            setPadding(0, 0, 0, 8)
+        }
+        val etCustomRules = TextInputEditText(this).apply {
+            setLines(3)
+            minLines = 3
+            textSize = 15f
+            setTextColor(colorTextPrimary)
+            background = null
+            gravity = Gravity.TOP
+            setPadding(0, 8, 0, 8)
+        }
+        // 存为成员变量供 loadConfig/saveConfig 使用
+        this.etCustomRules = etCustomRules
+        rulesLayout.addView(rulesLabel)
+        rulesLayout.addView(etCustomRules, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        rulesCard.addView(rulesLayout)
+        rootLayout.addView(rulesCard)
+
+        // ── 更新 ──
+        rootLayout.addView(createSectionTitle("更新"))
+        val updateCard = createCard()
+        val updateLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(8, 8, 8, 8)
+        }
+        btnCheckUpdate = createTextButton("检查更新") { checkForUpdate() }
+        updateLayout.addView(btnCheckUpdate)
+        updateCard.addView(updateLayout)
+        rootLayout.addView(updateCard)
+
+        // ── 保存按钮 ──
+        val saveBtn = createFilledButton("保存设置") { saveConfig() }
+        val saveHint = TextView(this).apply {
+            text = "修改后自动保存，也可手动点击保存"
+            textSize = 12f
+            setTextColor(colorTextSecondary)
+            gravity = Gravity.CENTER
+            setPadding(0, 8, 0, 0)
+        }
+        rootLayout.addView(spacerView(16))
+        rootLayout.addView(saveBtn)
+        rootLayout.addView(saveHint)
+
+        // ── 底部 ──
+        rootLayout.addView(spacerView(32))
+        val tvAuthor = TextView(this).apply {
+            text = "作者：喵喵喵"
+            textSize = 13f
+            setTextColor(colorTextSecondary)
+            gravity = Gravity.CENTER
+        }
+        val tvGithub = TextView(this).apply {
+            text = "github.com/3975380064-maker/QQZayuHelper"
+            textSize = 13f
+            setTextColor(colorPrimary)
+            gravity = Gravity.CENTER
+            setPadding(0, 8, 0, 0)
+            setOnClickListener {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/3975380064-maker/QQZayuHelper")))
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        rootLayout.addView(tvAuthor)
+        rootLayout.addView(tvGithub)
+
+        scrollView.addView(rootLayout)
         setContentView(scrollView)
 
         loadConfig()
@@ -273,34 +360,132 @@ class MainActivity : Activity() {
         updateServiceStatus()
     }
 
-    // ── 辅助视图构建 ──
+    // ── 现代化 UI 构建辅助 ──
 
-    private fun divider(): View = View(this).apply {
-        setBackgroundColor(0xFFDDDDDD.toInt())
-        val lp = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 1
+    private fun createCard(): CardView {
+        val card = CardView(this)
+        card.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            setMargins(0, 0, 0, 16)
+        }
+        card.radius = 16f
+        card.cardElevation = 0f
+        card.setCardBackgroundColor(colorCard)
+        return card
+    }
+
+    private fun createSectionTitle(text: String): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 13f
+        setTextColor(colorTextSecondary)
+        setTypeface(typeface, android.graphics.Typeface.BOLD)
+        setPadding(12, 16, 0, 8)
+    }
+
+    private fun createSwitch(text: String, checked: Boolean): SwitchMaterial = SwitchMaterial(this).apply {
+        this.text = text
+        isChecked = checked
+        textSize = 16f
+        setTextColor(colorTextPrimary)
+        setPadding(16, 16, 16, 16)
+        setOnCheckedChangeListener { _, _ ->
+            if (!isLoading) autoSave()
+        }
+    }
+
+    /**
+     * 创建带浮动标签的文本输入行，返回 (EditText, TextInputLayout) 对。
+     * 调用方把 TextInputLayout 添加到父布局，EditText 通过返回的引用访问值。
+     */
+    private fun createTextInputRow(hint: String, helper: String): Pair<TextInputEditText, TextInputLayout> {
+        val edit = TextInputEditText(this).apply {
+            textSize = 15f
+            setTextColor(colorTextPrimary)
+            setPadding(0, 8, 0, 8)
+        }
+        val layout = TextInputLayout(this).apply {
+            this.hint = hint
+            setHelperText(helper)
+            setHelperTextColor(android.content.res.ColorStateList.valueOf(colorTextSecondary))
+            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_NONE
+            setPadding(16, 4, 16, 8)
+            addView(edit)
+        }
+        return Pair(edit, layout)
+    }
+
+    private fun createOutlineButton(text: String, onClick: () -> Unit): MaterialButton {
+        val btn = MaterialButton(this, null, 0)
+        btn.text = text
+        btn.textSize = 16f
+        btn.setTextColor(colorPrimary)
+        btn.strokeColor = android.content.res.ColorStateList.valueOf(colorPrimary)
+        btn.strokeWidth = 2
+        btn.cornerRadius = 24
+        btn.setBackgroundColor(0x00000000)
+        btn.elevation = 0f
+        btn.stateListAnimator = null
+        btn.gravity = Gravity.CENTER
+        btn.setOnClickListener { onClick() }
+        btn.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
         )
-        lp.setMargins(0, 16, 0, 16)
-        layoutParams = lp
+        return btn
     }
 
-    private fun sectionTitle(text: String): TextView = TextView(this).apply {
-        this.text = text
-        textSize = 14f
-        setTextColor(0xFF888888.toInt())
-        setPadding(0, 0, 0, 12)
+    private fun createFilledButton(text: String, onClick: () -> Unit): MaterialButton {
+        val btn = MaterialButton(this, null, 0)
+        btn.text = text
+        btn.textSize = 16f
+        btn.setTextColor(0xFFFFFFFF.toInt())
+        btn.cornerRadius = 24
+        btn.setBackgroundColor(colorPrimary)
+        btn.elevation = 0f
+        btn.stateListAnimator = null
+        btn.gravity = Gravity.CENTER
+        btn.setOnClickListener { onClick() }
+        btn.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        return btn
     }
 
-    private fun labelText(text: String): TextView = TextView(this).apply {
-        this.text = text
-        textSize = 12f
-        setTextColor(0xFF999999.toInt())
-        setPadding(32, 4, 0, 4)
+    private fun createTextButton(text: String, onClick: () -> Unit): MaterialButton {
+        val btn = MaterialButton(this, null, 0)
+        btn.text = text
+        btn.textSize = 15f
+        btn.setTextColor(colorTextPrimary)
+        btn.setBackgroundColor(0x00000000)
+        btn.elevation = 0f
+        btn.stateListAnimator = null
+        btn.setOnClickListener { onClick() }
+        btn.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        btn.setPadding(32, 28, 32, 28)
+        btn.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        btn.rippleColor = android.content.res.ColorStateList.valueOf(0x1F000000)
+        return btn
     }
 
-    private fun spacer(heightDp: Int): TextView = TextView(this).apply {
-        text = " "
-        textSize = heightDp.toFloat()
+    private fun createThinDivider(): View = View(this).apply {
+        setBackgroundColor(colorDivider)
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 1
+        ).apply {
+            setMargins(32, 0, 0, 0)
+        }
+    }
+
+    private fun spacerView(heightDp: Int): View = View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, heightDp
+        )
     }
 
     // ── 业务逻辑 ──
@@ -308,7 +493,7 @@ class MainActivity : Activity() {
     private fun updateServiceStatus() {
         val enabled = isAccessibilityServiceEnabled()
         tvStatus.text = if (enabled) "服务状态：已开启" else "服务状态：未开启"
-        tvStatus.setTextColor(if (enabled) 0xFF4CAF50.toInt() else 0xFFFF5722.toInt())
+        tvStatus.setTextColor(if (enabled) colorSuccess else colorWarning)
         btnOpenSettings.visibility = if (enabled) View.GONE else View.VISIBLE
     }
 
@@ -316,7 +501,7 @@ class MainActivity : Activity() {
         val am = getSystemService(ACCESSIBILITY_SERVICE) as AccessibilityManager
         val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
         val ourService = "${packageName}.QQAccessibilityService"
-        return enabledServices.any { it.resolveInfo.serviceInfo.name == ourService }
+        return enabledServices.any { it.resolveInfo?.serviceInfo?.name == ourService }
     }
 
     private fun requestBatteryOptimization() {
@@ -339,12 +524,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun requestWakeLock() {
-        AlertDialog.Builder(this)
-            .setTitle("保持唤醒")
-            .setMessage("WAKE_LOCK 权限已声明，安装时自动授权。\n无障碍服务运行期间会持有唤醒锁，防止屏幕关闭后 CPU 休眠导致功能暂停。")
-            .setPositiveButton("知道了", null)
-            .show()
+    private fun requestAutoStart() {
+        if (!AutoStartHelper.jump(this)) {
+            Toast.makeText(this, "请手动在系统设置中开启自启动管理", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun checkForUpdate() {
@@ -375,7 +558,6 @@ class MainActivity : Activity() {
     }
 
     private fun showUpdateDialog(version: String) {
-        // 检查安装未知应用权限
         if (!UpdateChecker.canRequestInstallPackages(this)) {
             AlertDialog.Builder(this)
                 .setTitle("需要安装权限")
@@ -406,30 +588,35 @@ class MainActivity : Activity() {
     private fun autoSave() { saveConfig() }
 
     private fun loadConfig() {
+        isLoading = true
         val config = CatConfig.load(this)
-        cbEnabled.isChecked = config.enabled
-        cbMeow.isChecked = config.enableMeow
-        cbWoToBenmiao.isChecked = config.enableWoToBenmiao
-        cbNiToZhuren.isChecked = config.enableNiToZhuren
-        cbEmoticon.isChecked = config.enableRandomEmoticon
+        switchEnabled.isChecked = config.enabled
+        switchMeow.isChecked = config.enableMeow
+        switchWoToBenmiao.isChecked = config.enableWoToBenmiao
+        switchNiToZhuren.isChecked = config.enableNiToZhuren
+        switchEmoticon.isChecked = config.enableRandomEmoticon
         rbRealtime.isChecked = config.processingMode == CatConfig.REAL_TIME_MODE
         rbPunctuation.isChecked = config.processingMode != CatConfig.REAL_TIME_MODE
         etCustomEmoticons.setText(config.customEmoticons.joinToString("\n"))
+        etCustomRules.setText(config.customRules.joinToString("\n"))
         etWoReplacement.setText(config.woReplacement)
         etNiReplacement.setText(config.niReplacement)
         etMeowSuffix.setText(config.meowSuffix)
+        // idleDelayMs 存的是毫秒，UI 直接显示
         etIdleDelay.setText(config.idleDelayMs.toString())
+        isLoading = false
     }
 
     private fun saveConfig() {
         val config = CatConfig()
-        config.enabled = cbEnabled.isChecked
-        config.enableMeow = cbMeow.isChecked
-        config.enableWoToBenmiao = cbWoToBenmiao.isChecked
-        config.enableNiToZhuren = cbNiToZhuren.isChecked
-        config.enableRandomEmoticon = cbEmoticon.isChecked
+        config.enabled = switchEnabled.isChecked
+        config.enableMeow = switchMeow.isChecked
+        config.enableWoToBenmiao = switchWoToBenmiao.isChecked
+        config.enableNiToZhuren = switchNiToZhuren.isChecked
+        config.enableRandomEmoticon = switchEmoticon.isChecked
         config.processingMode = if (rbRealtime.isChecked) CatConfig.REAL_TIME_MODE else CatConfig.PUNCTUATION_MODE
         config.customEmoticons = etCustomEmoticons.text.toString().split("\n").filter { it.isNotBlank() }.toTypedArray()
+        config.customRules = etCustomRules.text.toString().split("\n").filter { it.isNotBlank() }.toTypedArray()
 
         val wo = etWoReplacement.text.toString().trim()
         if (wo.isNotEmpty()) config.woReplacement = wo
@@ -443,7 +630,7 @@ class MainActivity : Activity() {
         val delay = etIdleDelay.text.toString().trim()
         if (delay.isNotEmpty()) {
             val d = delay.toIntOrNull()
-            if (d != null && d > 0) config.idleDelayMs = d
+            if (d != null && d > 0) config.idleDelayMs = d  // 用户输入毫秒，直接存
         }
 
         CatConfig.save(this, config)
