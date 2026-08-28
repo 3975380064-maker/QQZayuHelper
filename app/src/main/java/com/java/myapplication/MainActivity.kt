@@ -360,6 +360,15 @@ class MainActivity : Activity() {
         updateServiceStatus()
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            // 某些 ROM 上 onResume 时 AccessibilityManager 尚未刷新，
+            // onWindowFocusChanged 更靠后，确保读到最新状态
+            updateServiceStatus()
+        }
+    }
+
     // ── 现代化 UI 构建辅助 ──
 
     private fun createCard(): CardView {

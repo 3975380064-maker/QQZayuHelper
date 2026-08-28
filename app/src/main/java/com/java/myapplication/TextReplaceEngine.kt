@@ -279,15 +279,35 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
     /**
      * 根据用户在 raw 中的光标位置，映射到 target 中的对应位置。
-     * 取 raw 前缀 → 剥离引擎输出 → 重新处理 → 得到 target 前缀长度。
+     * 只计算替换变换（我/你/自定义规则），不计后缀和颜文字，
+     * 避免光标跳到末尾。
      */
     private fun mapCursorPosition(raw: String, cursorPos: Int, target: String, cfg: CatConfig): Int {
         if (cursorPos <= 0 || cursorPos >= raw.length) return target.length
         val rawPrefix = raw.substring(0, cursorPos)
         val userPrefix = stripEngineOutput(rawPrefix, cfg)
         if (userPrefix.isEmpty()) return target.length
-        val targetPrefix = TextProcessor.process(userPrefix, cfg)
-        return targetPrefix.length.coerceIn(0, target.length)
+        // 只应用替换变换，不加后缀/颜文字
+        val mapped = applyReplacementsOnly(userPrefix, cfg)
+        return mapped.length.coerceIn(0, target.length)
+    }
+
+    /** 只应用替换变换（我/你/自定义规则），不加后缀/颜文字 */
+    private fun applyReplacementsOnly(text: String, cfg: CatConfig): String {
+        var result = text
+        if (cfg.enableWoToBenmiao && cfg.woReplacement.isNotEmpty()) {
+            result = result.replace("我", cfg.woReplacement)
+        }
+        if (cfg.enableNiToZhuren && cfg.niReplacement.isNotEmpty()) {
+            result = result.replace("你", cfg.niReplacement)
+        }
+        for (rule in cfg.customRules) {
+            val parts = rule.split("=", limit = 2)
+            if (parts.size == 2 && parts[0].isNotBlank()) {
+                result = result.replace(parts[0], parts[1])
+            }
+        }
+        return result
     }
 
     /**
