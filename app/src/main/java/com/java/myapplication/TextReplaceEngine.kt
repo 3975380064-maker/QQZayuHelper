@@ -199,8 +199,9 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
                     Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
 
-                    // 光标始终放在末尾，避免打断输入法
-                    val ok = setTextOrFallback(inp, target, target.length)
+                    // 根据用户实际光标位置映射到 target 中的对应位置
+                    val cursorInTarget = mapCursorPosition(raw, inp.textSelectionStart, target, cfg)
+                    val ok = setTextOrFallback(inp, target, cursorInTarget)
                     if (ok) {
                         lastSet = target
                         lastWrittenText = target
@@ -277,8 +278,21 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     }
 
     /**
+     * 根据用户在 raw 中的光标位置，映射到 target 中的对应位置。
+     * 取 raw 前缀 → 剥离引擎输出 → 重新处理 → 得到 target 前缀长度。
+     */
+    private fun mapCursorPosition(raw: String, cursorPos: Int, target: String, cfg: CatConfig): Int {
+        if (cursorPos <= 0 || cursorPos >= raw.length) return target.length
+        val rawPrefix = raw.substring(0, cursorPos)
+        val userPrefix = stripEngineOutput(rawPrefix, cfg)
+        if (userPrefix.isEmpty()) return target.length
+        val targetPrefix = TextProcessor.process(userPrefix, cfg)
+        return targetPrefix.length.coerceIn(0, target.length)
+    }
+
+    /**
      * 设置文本或剪贴板 fallback。
-     * 光标始终放在末尾（target.length），避免打断输入法。
+     * 根据光标位置映射，用户在前面/中间输入时光标不乱跳。
      */
     private fun setTextOrFallback(node: AccessibilityNodeInfo, text: String, cursorPos: Int): Boolean {
         if (setTextWithSelection(node, text, cursorPos)) return true
