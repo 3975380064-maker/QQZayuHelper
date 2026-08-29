@@ -52,10 +52,15 @@ object TextProcessor {
         return resultStr
     }
 
-    private fun getRandomEmoticon(config: CatConfig): String {
+    /**
+     * 根据文本内容确定性地选择颜文字，避免同文本每次处理随机不同导致反复写入。
+     * @param seed 文本内容（已做替换和加后缀），作为选择依据
+     */
+    private fun getRandomEmoticon(seed: String, config: CatConfig): String {
         val emoticons = config.getActiveEmoticons()
         if (emoticons.isEmpty()) return ""
-        return emoticons[RANDOM.nextInt(emoticons.size)]
+        val index = seed.hashCode().and(Int.MAX_VALUE) % emoticons.size
+        return emoticons[index]
     }
 
     fun process(original: String, config: CatConfig): String {
@@ -75,7 +80,7 @@ object TextProcessor {
             text = addMeow(text, config.meowSuffix)
         }
         if (config.enableRandomEmoticon) {
-            val emoticon = getRandomEmoticon(config)
+            val emoticon = getRandomEmoticon(text, config)
             if (emoticon.isNotEmpty()) {
                 text = "$text $emoticon"
             }
