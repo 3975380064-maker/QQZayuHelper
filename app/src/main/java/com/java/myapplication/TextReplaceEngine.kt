@@ -35,6 +35,9 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     var lastWrittenText = ""
     var currentPkg = ""
 
+    /** 当前聊天窗口使用的颜文字（缓存复用，避免输入过程中反复更新打断） */
+    var currentEmoticon = ""
+
     private val handler = Handler(Looper.getMainLooper())
     private val idleTask = Runnable { doProcess() }
     private var processingStartTime = 0L
@@ -126,6 +129,7 @@ class TextReplaceEngine(private val service: AccessibilityService) {
         lastWriteTime = 0L
         lastTextLength = 0
         lastWrittenText = ""
+        currentEmoticon = ""
     }
 
     fun onInterrupt() {
@@ -191,10 +195,15 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
                     if (userOriginal.isEmpty()) return
 
-                    val target = TextProcessor.process(userOriginal, cfg)
+                    val target = TextProcessor.process(userOriginal, cfg, currentEmoticon)
                     if (target == raw) {
                         lastSet = target
                         return
+                    }
+                    // 首次处理时缓存本次选定的颜文字，之后输入过程中复用，避免反复写入打断
+                    if (currentEmoticon.isEmpty() && cfg.enableRandomEmoticon) {
+                        val idx = target.lastIndexOf(' ')
+                        currentEmoticon = if (idx >= 0) target.substring(idx + 1) else target
                     }
 
                     Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
