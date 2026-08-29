@@ -63,11 +63,7 @@ object TextProcessor {
         return emoticons[index]
     }
 
-    /**
-     * 处理文本（替换 + 后缀 + 颜文字）。
-     * @param forcedEmoticon 可选，使用缓存颜文字而非随机选择
-     */
-    fun process(original: String, config: CatConfig, forcedEmoticon: String = ""): String {
+    fun process(original: String, config: CatConfig): String {
         if (original.isNullOrBlank()) return original
 
         var text = original.trim()
@@ -84,13 +80,16 @@ object TextProcessor {
             text = addMeow(text, config.meowSuffix)
         }
         if (config.enableRandomEmoticon) {
-            val emoticon = if (forcedEmoticon.isNotEmpty()) {
-                forcedEmoticon
-            } else {
-                getRandomEmoticon(text, config)
+            // 如果文本末尾已经包含一个有效的颜文字，则保留它，不重新选
+            val emoticons = config.getActiveEmoticons()
+            val alreadyHasEmoticon = emoticons.any { em ->
+                text.endsWith(" $em") || text.endsWith(em)
             }
-            if (emoticon.isNotEmpty()) {
-                text = "$text $emoticon"
+            if (!alreadyHasEmoticon) {
+                val emoticon = getRandomEmoticon(text, config)
+                if (emoticon.isNotEmpty()) {
+                    text = "$text $emoticon"
+                }
             }
         }
         return text

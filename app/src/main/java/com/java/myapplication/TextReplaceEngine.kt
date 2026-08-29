@@ -35,9 +35,6 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     var lastWrittenText = ""
     var currentPkg = ""
 
-    /** 当前聊天窗口使用的颜文字（缓存复用，避免输入过程中反复更新打断） */
-    var currentEmoticon = ""
-
     private val handler = Handler(Looper.getMainLooper())
     private val idleTask = Runnable { doProcess() }
     private var processingStartTime = 0L
@@ -129,7 +126,6 @@ class TextReplaceEngine(private val service: AccessibilityService) {
         lastWriteTime = 0L
         lastTextLength = 0
         lastWrittenText = ""
-        currentEmoticon = ""
     }
 
     fun onInterrupt() {
@@ -195,15 +191,21 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
                     if (userOriginal.isEmpty()) return
 
-                    val target = TextProcessor.process(userOriginal, cfg, currentEmoticon)
+                    val target = TextProcessor.process(userOriginal, cfg)
                     if (target == raw) {
                         lastSet = target
                         return
                     }
-                    // 首次处理时缓存本次选定的颜文字，之后输入过程中复用，避免反复写入打断
-                    if (currentEmoticon.isEmpty() && cfg.enableRandomEmoticon) {
-                        val idx = target.lastIndexOf(' ')
-                        currentEmoticon = if (idx >= 0) target.substring(idx + 1) else target
+
+                    // 如果 target 和 raw 仅颜文字不同，跳过写入（避免反复随机颜文字导致死循环）
+                    if (cfg.enableRandomEmoticon && target != raw) {
+                        val rawStripped = stripSuffixEmoticon(raw, cfg)
+                        val targetStripped = stripSuffixEmoticon(target, cfg)
+                        if (rawStripped == targetStripped) {
+                            Log.d(TAG, "仅颜文字选择不同，跳过写入: raw=$raw target=$target")
+                            lastSet = target
+                            return
+                        }
                     }
 
                     Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
@@ -317,6 +319,16 @@ class TextReplaceEngine(private val service: AccessibilityService) {
             }
         }
         return result
+    }
+
+    /** 从文本末尾剥离颜文字，只保留内容部分 */
+    private fun stripSuffixEmoticon(text: String, cfg: CatConfig): String {
+        val emoticons = cfg.getActiveEmoticons()
+        for (em in emoticons.sortedByDescending { it.length }) {
+            if (text.endsWith(" $em")) return text.substring(0, text.length - em.length - 1).trim()
+            if (text.endsWith(em)) return text.substring(0, text.length - em.length).trim()
+        }
+        return text
     }
 
     /**
