@@ -38,7 +38,10 @@ object TextProcessor {
             val part = parts[i].trim()
             if (part.isNotEmpty()) {
                 result.append(part)
-                result.append(suffix)
+                // 如果该片段末尾已经有后缀，不再重复添加
+                if (!part.endsWith(suffix)) {
+                    result.append(suffix)
+                }
             }
             if (i < separators.size) {
                 result.append(separators[i])
