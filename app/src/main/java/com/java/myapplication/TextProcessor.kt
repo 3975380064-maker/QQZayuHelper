@@ -53,6 +53,19 @@ object TextProcessor {
     }
 
     /**
+     * [addMeow] 的逆操作：剥掉每个句段末尾的后缀，还原用户原文。
+     *
+     * 必须和 addMeow 完全对称 —— addMeow 会给“每一段”都加后缀，
+     * 如果这里只剥末尾一个，中间那些就会残留成用户原文的一部分，
+     * 下一次写入再加一遍后缀，就会越滚越多（如 你好喵，吃饭喵 → 你好喵喵，吃饭喵）。
+     */
+    fun stripMeowSuffix(text: String, cfg: CatConfig): String {
+        if (!cfg.enableMeow || cfg.meowSuffix.isEmpty()) return text.trim()
+        val pattern = Regex("${Regex.escape(cfg.meowSuffix)}(?=[，。！？\\s]|\$)")
+        return text.replace(pattern, "").trim()
+    }
+
+    /**
      * 根据文本内容确定性地选择颜文字。
      * 用文本内容做种子而不是随机数，避免同一段文本每次处理得到不同装饰、
      * 进而反复写回输入框打断用户输入。

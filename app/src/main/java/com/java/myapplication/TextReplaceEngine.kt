@@ -256,10 +256,8 @@ class TextReplaceEngine(private val service: AccessibilityService) {
             }
         }
 
-        // 2. 剥离句尾后缀（只从末尾剥离一次）
-        if (cfg.enableMeow && result.endsWith(cfg.meowSuffix)) {
-            result = result.substring(0, result.length - cfg.meowSuffix.length).trim()
-        }
+        // 2. 剥离后缀：addMeow 是给每个句段都加的，所以要按句段还原（见 TextProcessor.stripMeowSuffix）
+        result = TextProcessor.stripMeowSuffix(result, cfg)
 
         // 3. 还原替换词与自定义规则，实现在 ReplaceRules，保证与正向替换严格互逆
         return ReplaceRules.revert(result, cfg).trim()

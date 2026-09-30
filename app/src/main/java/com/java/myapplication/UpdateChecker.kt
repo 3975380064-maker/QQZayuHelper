@@ -50,27 +50,50 @@ object UpdateChecker {
     /** 上限，防止异常响应把存储写满。 */
     private const val MAX_APK_SIZE = 128L * 1024L * 1024L
 
+    /** 单个源的连接/读取超时，失败要快速跳过，不能让用户干等。 */
+    private const val CONNECT_TIMEOUT_MS = 8000
+    private const val READ_TIMEOUT_MS = 20000
+
+    /** 所有源合计的时间预算，超了就放弃，避免长时间卡在“下载中”。 */
+    private const val DOWNLOAD_BUDGET_MS = 150_000L
+
     /**
-     * 下载源，按 2026-09 实测可用性排序。
-     * 测速结果：github.com 直连最快且完整；gh-proxy.com / gh.xmly.dev 可用但较慢；
-     * ghproxy.net 会返回截断文件（靠签名校验兜住）；ghfast.top、gh.llkk.cc 等已失效。
+     * 下载源。
+     *
+     * 注意：镜像的可用性随地区、运营商、时间变化很大，在这里测通不代表别处能用，
+     * 反过来也一样（实测同一个 fastgit.cc，两次探测结果就一死一活）。
+     * 所以这里刻意覆盖多个不同运营方的镜像，而不是只留“当前测得最快”的几个 ——
+     * 多加一个源最坏只是多花几秒重试，安全性由 verifyApk 的签名校验兜底。
+     *
+     * 顺序按实测结果排：官方直连优先，其余按可用性依次降级。
+     * 实测（2026-09-30，单次探测）可用：github.com 直连、gh.xmly.dev、gh-proxy.com、
+     * ghproxy.net、gh-proxy.net、gitproxy.click、fastgit.cc、gh.chjina.com、
+     * ghp.keleyaa.com、gh.ddlc.top（返回 429，限流但主机可达）。
      */
     private val DOWNLOAD_SOURCES = listOf(
         "https://github.com/%s/%s/releases/latest/download/%s",
         "https://gh.xmly.dev/https://github.com/%s/%s/releases/latest/download/%s",
         "https://gh-proxy.com/https://github.com/%s/%s/releases/latest/download/%s",
-        "https://ghproxy.net/https://github.com/%s/%s/releases/latest/download/%s"
+        "https://ghproxy.net/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gh-proxy.net/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gitproxy.click/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://fastgit.cc/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gh.chjina.com/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://ghp.keleyaa.com/https://github.com/%s/%s/releases/latest/download/%s",
+        "https://gh.ddlc.top/https://github.com/%s/%s/releases/latest/download/%s"
     )
 
     /**
      * 版本探测源：读取仓库里的 app/build.gradle.kts 解析 versionName。
      * 用文件而不是 GitHub API，因为 api.github.com 在真实网络下常被限流（实测 403）。
+     * jsDelivr 放最后：它是 CDN 缓存，可能给出最多 12 小时前的旧版本号。
      */
     private val VERSION_SOURCES = listOf(
         "https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
         "https://gh-proxy.com/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
-        "https://githubraw.com/%s/%s/main/app/build.gradle.kts",
         "https://ghproxy.net/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://gh.xmly.dev/https://raw.githubusercontent.com/%s/%s/main/app/build.gradle.kts",
+        "https://githubraw.com/%s/%s/main/app/build.gradle.kts",
         "https://cdn.jsdelivr.net/gh/%s/%s@main/app/build.gradle.kts"
     )
 
@@ -96,8 +119,9 @@ object UpdateChecker {
         FAILED
     }
 
+    /** getExternalFilesDir 在外部存储不可用时会返回 null，退回内部目录，避免更新功能静默失效。 */
     private fun updateDir(context: Context): File =
-        File(context.getExternalFilesDir(null), "updates")
+        File(context.getExternalFilesDir(null) ?: context.filesDir, "updates")
 
     private fun apkFile(context: Context): File =
         File(updateDir(context), "ZayuHelper_update.apk")
@@ -164,8 +188,13 @@ object UpdateChecker {
         val target = apkFile(context)
         var sawNotNewer = false
         var sawInvalid = false
+        val deadline = System.currentTimeMillis() + DOWNLOAD_BUDGET_MS
 
         for ((index, template) in DOWNLOAD_SOURCES.withIndex()) {
+            if (System.currentTimeMillis() > deadline) {
+                Log.w(TAG, "已用完 ${DOWNLOAD_BUDGET_MS}ms 预算，停止尝试剩余源")
+                break
+            }
             val url = template.format(REPO_OWNER, REPO_NAME, APK_ASSET_NAME)
             if (target.exists() && !target.delete()) {
                 Log.w(TAG, "无法删除旧文件，跳过本次更新")
@@ -200,6 +229,9 @@ object UpdateChecker {
             return DownloadResult.SUCCESS
         }
 
+        // 失败路径不要留下半截文件
+        if (target.exists()) target.delete()
+
         return when {
             sawNotNewer -> DownloadResult.ALREADY_LATEST
             sawInvalid -> DownloadResult.REJECTED
@@ -213,8 +245,8 @@ object UpdateChecker {
         var output: FileOutputStream? = null
         try {
             connection = URL(urlStr).openConnection() as HttpURLConnection
-            connection.connectTimeout = 15000
-            connection.readTimeout = 30000
+            connection.connectTimeout = CONNECT_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
             connection.instanceFollowRedirects = true
             connection.requestMethod = "GET"
             // 不要压缩，保证按字节读取，便于判断文件是否被截断

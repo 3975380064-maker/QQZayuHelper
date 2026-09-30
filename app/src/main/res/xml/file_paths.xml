@@ -4,4 +4,8 @@
     <external-files-path
         name="updates"
         path="updates/" />
+    <!-- 外部存储不可用时的回退目录 getFilesDir()/updates -->
+    <files-path
+        name="updates_internal"
+        path="updates/" />
 </paths>

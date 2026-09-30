@@ -63,6 +63,21 @@ class TextProcessorTest {
     }
 
     @Test
+    fun `后缀剥离是加后缀的逆操作`() {
+        val cfg = config()
+        val processed = TextProcessor.process("你好，吃饭", cfg)
+        assertEquals("你好喵，吃饭喵", processed)
+        // 必须把每一段的后缀都剥掉，只剥末尾会导致再次写入时后缀累积
+        assertEquals("你好，吃饭", TextProcessor.stripMeowSuffix(processed, cfg))
+    }
+
+    @Test
+    fun `关掉后缀时不剥离`() {
+        val cfg = config().apply { enableMeow = false }
+        assertEquals("你好喵，吃饭喵", TextProcessor.stripMeowSuffix("你好喵，吃饭喵", cfg))
+    }
+
+    @Test
     fun `自定义规则生效`() {
         val cfg = config().apply {
             enableWoToBenmiao = false

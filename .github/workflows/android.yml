@@ -41,6 +41,10 @@ jobs:
       - name: Unit test and Lint
         run: ./gradlew testDebugUnitTest lintDebug --no-daemon
 
+      - name: Build debug APK
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: ./gradlew assembleDebug --no-daemon
+
       - name: Prepare release keystore
         if: startsWith(github.ref, 'refs/tags/v')
         env:
