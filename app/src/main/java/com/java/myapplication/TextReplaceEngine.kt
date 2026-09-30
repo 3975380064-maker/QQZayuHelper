@@ -60,6 +60,7 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                Log.d(TAG, "窗口变化 pkg=$pkg class=${event.className}")
                 if (pkg != currentPkg) {
                     resetState()
                     currentPkg = pkg
@@ -75,9 +76,11 @@ class TextReplaceEngine(private val service: AccessibilityService) {
             }
 
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
-                // QQ 里还有搜索框等其它输入框，它们的事件会污染 lastTextLength 等状态，
-                // 导致智能模式的空闲任务被误取消，这里只处理输入框自身的事件
-                if (!isFromInputBox(event)) return
+                // QQ 里还有搜索框等其它输入框，它们的事件会污染 lastTextLength 等状态。
+                // 目前先只记录来源、不做拦截：等确认了真实聊天输入框的 viewId 再收紧，
+                // 否则一旦 id 判断不准，整个功能会静默失效（很难查）。
+                val sourceId = describeSource(event)
+                Log.d(TAG, "文本变化 viewId=$sourceId")
 
                 val cfg = loadConfig()
                 val mode = cfg.processingMode
@@ -107,14 +110,13 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     }
 
     /**
-     * 判断文本变化事件是否来自 QQ 输入框本身。
-     * 取不到来源信息时按“是输入框”处理，避免误伤主流程。
+     * 取事件来源控件的 viewId，取不到返回 null。
+     * 日志里用它来判断事件到底来自哪个控件——排查“没反应”时最关键的一条信息。
      */
-    private fun isFromInputBox(event: AccessibilityEvent): Boolean {
-        val source = event.source ?: return true
+    private fun describeSource(event: AccessibilityEvent): String? {
+        val source = event.source ?: return null
         return try {
-            val viewId = source.viewIdResourceName
-            viewId == null || viewId == ID_INPUT
+            source.viewIdResourceName
         } finally {
             @Suppress("DEPRECATION")
             source.recycle()
@@ -222,7 +224,7 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
                     // target 与 raw 若只差装饰（开头前缀 / 句尾颜文字 / 句尾后缀），跳过写入。
                     // 为了换个装饰而重写整个输入框，既突兀又会把光标拉到末尾。
-                    if (stripDecorations(raw, cfg) == stripDecorations(target, cfg)) {
+                    if (TextProcessor.isDecorationOnlyDiff(raw, target, cfg)) {
                         Log.d(TAG, "仅装饰不同，跳过写入: raw=$raw target=$target")
                         // 跳过了写入，框里实际还是 raw，lastSet 必须记录真实状态，
                         // 否则下一个事件会走“重新剥离”那条更脆弱的路径
@@ -261,20 +263,10 @@ class TextReplaceEngine(private val service: AccessibilityService) {
         // 0. 剥离开头前缀（与 process 里的添加顺序相反）
         var result = TextProcessor.stripPrefix(text, cfg)
 
-        // 1. 剥离句尾表情（只从末尾剥离一次，带空格情况）
-        if (cfg.enableRandomEmoticon) {
-            val emotes = cfg.getActiveEmoticons().sortedByDescending { it.length }
-            for (em in emotes) {
-                if (result.endsWith(" $em")) {
-                    result = result.substring(0, result.length - em.length - 1).trim()
-                    break
-                }
-                if (result.endsWith(em)) {
-                    result = result.substring(0, result.length - em.length).trim()
-                    break
-                }
-            }
-        }
+        // 1. 剥离句尾颜文字。
+        //    统一走 TextProcessor，避免这里再留一份实现 ——
+        //    之前两份实现的开关判断不一致，会导致"关掉颜文字时把用户正文当成颜文字剥掉"。
+        result = TextProcessor.stripSuffixEmoticon(result, cfg)
 
         // 2. 剥离后缀：addMeow 是给每个句段都加的，所以要按句段还原（见 TextProcessor.stripMeowSuffix）
         result = TextProcessor.stripMeowSuffix(result, cfg)
@@ -314,27 +306,6 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     /** 只应用替换变换（我/你/自定义规则），不加后缀/颜文字 */
     private fun applyReplacementsOnly(text: String, cfg: CatConfig): String =
         ReplaceRules.apply(text, cfg)
-
-    /**
-     * 剥掉全部装饰（开头前缀、句尾颜文字、句尾后缀），只留正文。
-     * 用于判断两份文本是否“只差装饰”，从而避免无谓的重写。
-     */
-    private fun stripDecorations(text: String, cfg: CatConfig): String {
-        var result = TextProcessor.stripPrefix(text, cfg)
-        result = stripSuffixEmoticon(result, cfg)
-        result = TextProcessor.stripMeowSuffix(result, cfg)
-        return result.trim()
-    }
-
-    /** 从文本末尾剥离颜文字，只保留内容部分 */
-    private fun stripSuffixEmoticon(text: String, cfg: CatConfig): String {
-        val emoticons = cfg.getActiveEmoticons()
-        for (em in emoticons.sortedByDescending { it.length }) {
-            if (text.endsWith(" $em")) return text.substring(0, text.length - em.length - 1).trim()
-            if (text.endsWith(em)) return text.substring(0, text.length - em.length).trim()
-        }
-        return text
-    }
 
     /**
      * 设置文本或剪贴板 fallback。

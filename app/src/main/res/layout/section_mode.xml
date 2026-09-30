@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.Zayu.Card">
+
+    <LinearLayout style="@style/Widget.Zayu.CardContent">
+
+        <TextView
+            style="@style/Widget.Zayu.SectionTitle"
+            android:text="@string/section_mode"
+            app:drawableStartCompat="@drawable/ic_mode"
+            app:drawableTint="?attr/colorPrimary" />
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/modeToggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:checkedButton="@id/btnModeRealtime"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnModeRealtime"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/mode_realtime" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnModePunctuation"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/mode_punctuation" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <TextView
+            android:id="@+id/tvModeSummary"
+            style="@style/Widget.Zayu.SectionSummary"
+            android:layout_marginTop="6dp"
+            android:text="@string/mode_punctuation_summary" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/idleRow"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:hint="@string/hint_idle_delay"
+            app:helperText="@string/helper_idle_delay"
+            app:helperTextEnabled="true">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etIdleDelay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

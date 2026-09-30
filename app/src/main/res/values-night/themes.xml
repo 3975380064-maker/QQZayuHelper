@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      深色主题。与 values/themes.xml 同名，系统切到深色时自动生效。
+      结构必须和浅色那份保持一致，只换颜色。
+    -->
+    <style name="Theme.Zayu" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand_primary</item>
+        <item name="colorOnPrimary">@color/brand_on_primary</item>
+        <item name="colorPrimaryContainer">@color/brand_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/brand_on_primary_container</item>
+
+        <!-- 中性色阶：页面底比卡片更暗，靠明度差分层 -->
+        <item name="android:colorBackground">@color/neutral_background</item>
+        <item name="android:windowBackground">@color/neutral_background</item>
+        <item name="colorSurface">@color/neutral_surface</item>
+        <item name="colorSurfaceContainer">@color/neutral_surface_container</item>
+        <item name="colorSurfaceContainerHighest">@color/neutral_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/neutral_surface_container_high</item>
+        <item name="colorOnSurface">@color/neutral_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/neutral_on_surface_variant</item>
+        <item name="colorSurfaceVariant">@color/neutral_surface_variant</item>
+        <item name="colorOutline">@color/neutral_outline</item>
+        <item name="colorOutlineVariant">@color/neutral_outline_variant</item>
+
+        <!--
+          关键：深色下状态栏/导航栏图标必须改成浅色。
+          否则深底 + 深色图标 = 状态栏一片黑，时间和电量全看不见，
+          这是深色模式最常踩的坑。
+        -->
+        <item name="android:statusBarColor">@color/neutral_surface</item>
+        <item name="android:navigationBarColor">@color/neutral_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
+    </style>
+
+</resources>

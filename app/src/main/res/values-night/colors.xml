@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      品牌色（深色）。
+      深色下不能用浅色的蓝（对比度不够、会刺眼），整体换成低饱和高亮的色阶。
+    -->
+    <color name="brand_primary">#96CCFF</color>
+    <color name="brand_on_primary">#003354</color>
+    <color name="brand_primary_container">#004A77</color>
+    <color name="brand_on_primary_container">#CEE5FF</color>
+
+    <!-- 中性色阶（深色）：页面底比卡片更暗，靠明度差分层 -->
+    <color name="neutral_background">#0F1317</color>
+    <color name="neutral_surface">#171C21</color>
+    <color name="neutral_surface_container">#191E23</color>
+    <color name="neutral_surface_container_high">#22282E</color>
+    <color name="neutral_on_surface">#E3E6EA</color>
+    <color name="neutral_on_surface_variant">#AEB4BC</color>
+    <color name="neutral_surface_variant">#3A4149</color>
+    <color name="neutral_outline">#6B7279</color>
+    <color name="neutral_outline_variant">#333A41</color>
+
+    <color name="status_on">#7CDB9A</color>
+    <color name="status_off">#FFB4AB</color>
+</resources>

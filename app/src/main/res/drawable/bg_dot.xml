@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 状态圆点。颜色由代码通过 backgroundTintList 设置（跟随日/夜两套语义色） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#FF000000" />
+</shape>

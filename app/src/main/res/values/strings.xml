@@ -2,4 +2,87 @@
 <resources>
     <string name="app_name">杂鱼助手</string>
     <string name="accessibility_service_description">把 QQ 聊天输入框里的文字替换成“杂鱼语”（我 → 本喵、句尾加喵、随机猫颜文字等）。仅在检测到 QQ 输入框内容变化时工作，不读取其它应用的任何内容。</string>
+
+    <!-- 顶栏 -->
+    <string name="action_save">保存设置</string>
+    <string name="action_github">项目主页</string>
+
+    <!-- 服务状态 -->
+    <string name="section_status">服务状态</string>
+    <string name="status_on">已开启</string>
+    <string name="status_off">未开启</string>
+    <string name="status_hint_on">无障碍服务正在运行，在 QQ 里打字即可自动替换。</string>
+    <string name="status_hint_off">需要开启无障碍服务才能工作，开启后回到本页即可。</string>
+    <string name="action_open_accessibility">去系统设置开启</string>
+
+    <!-- 替换规则 -->
+    <string name="section_switches">替换规则</string>
+    <string name="switch_master_title">启用文字替换</string>
+    <string name="switch_master_summary">总开关，关闭后完全不处理输入</string>
+    <string name="switch_meow">句尾加后缀</string>
+    <string name="hint_meow_suffix">后缀内容</string>
+    <string name="helper_meow_suffix">例如：喵、唔喵、咩</string>
+    <string name="switch_wo">把「我」换掉</string>
+    <string name="hint_wo_replacement">替换为</string>
+    <string name="helper_wo_replacement">例如：本喵、咱、吾辈</string>
+    <string name="switch_ni">把「你」换掉</string>
+    <string name="hint_ni_replacement">替换为</string>
+    <string name="helper_ni_replacement">例如：主人、杂鱼</string>
+    <string name="switch_emoticon">句尾随机颜文字</string>
+    <string name="switch_prefix">句首加前缀</string>
+    <string name="hint_prefix">前缀内容</string>
+    <string name="helper_prefix">例如：呼喵…、唔…</string>
+
+    <!-- 自定义规则 -->
+    <string name="section_custom_rules">自定义替换规则</string>
+    <string name="section_custom_rules_summary">按顺序生效，可以加多条</string>
+    <string name="rule_arrow">→</string>
+    <string name="hint_rule_from">原词</string>
+    <string name="hint_rule_to">替换为</string>
+    <string name="rules_empty">还没有规则，点下面的按钮加一条</string>
+    <string name="action_add_rule">添加规则</string>
+    <string name="action_delete_rule">删除这条规则</string>
+
+    <!-- 触发方式 -->
+    <string name="section_mode">触发方式</string>
+    <string name="mode_realtime">智能模式</string>
+    <string name="mode_punctuation">标点模式</string>
+    <string name="mode_realtime_summary">停手一小会儿就自动处理</string>
+    <string name="mode_punctuation_summary">打出 。！？ 之后再处理</string>
+    <string name="hint_idle_delay">空闲延迟（毫秒）</string>
+    <string name="helper_idle_delay">仅智能模式有效，建议 800～1500</string>
+
+    <!-- 自定义颜文字 -->
+    <string name="section_custom_emoticons">自定义颜文字</string>
+    <string name="hint_one_per_line">每行一个，留空使用内置</string>
+    <string name="helper_emoticons">内置 100+ 条猫颜文字；填写后只用自己的</string>
+
+    <!-- 关于 -->
+    <string name="section_about">关于与权限</string>
+    <string name="about_author">作者：喵喵喵</string>
+    <string name="about_version">版本 %1$s</string>
+    <string name="action_check_update">检查更新</string>
+    <string name="action_battery_optimization">申请电池优化白名单</string>
+    <string name="action_autostart">管理自启动</string>
+
+    <!-- 提示 -->
+    <string name="snackbar_saved">设置已保存</string>
+    <string name="toast_battery_whitelisted">已在电池优化白名单中</string>
+    <string name="toast_autostart_manual">请手动在系统设置中开启自启动管理</string>
+    <string name="toast_cannot_open_browser">无法打开浏览器</string>
+    <string name="toast_checking">检查中…</string>
+    <string name="toast_check_failed">检查更新失败，请检查网络连接</string>
+    <string name="toast_up_to_date">当前已是最新版本</string>
+    <string name="toast_update_failed">检查更新失败</string>
+    <string name="toast_downloading">下载中，请稍候…</string>
+    <string name="toast_download_start">开始下载…</string>
+    <string name="toast_verify_rejected">安装包校验未通过，已拒绝安装</string>
+    <string name="toast_download_failed">下载失败，请稍后重试或到 GitHub Releases 手动下载</string>
+    <string name="dialog_update_title">发现新版本 v%1$s</string>
+    <string name="dialog_update_message">下载完成后会自动校验安装包签名，校验不通过不会安装。</string>
+    <string name="dialog_download">下载</string>
+    <string name="dialog_cancel">取消</string>
+    <string name="dialog_install_title">需要安装权限</string>
+    <string name="dialog_install_message">请先开启「安装未知应用」权限，否则无法自动安装更新。</string>
+    <string name="dialog_go_settings">去设置</string>
 </resources>

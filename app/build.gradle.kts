@@ -53,6 +53,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // 布局改用 XML + ViewBinding，不再用代码 new 控件
+    buildFeatures {
+        viewBinding = true
+    }
 }
 
 // Force use of ARM64 binaries for AAPT2 in Proot environment
@@ -65,9 +70,11 @@ configurations.all {
 }
 
 dependencies {
+    // AppCompatActivity：DayNight 主题与 AppCompatDelegate 需要它
+    // （Material 本来就依赖 appcompat，这里显式声明是因为我们直接用到它的 API）
+    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.core:core-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.cardview:cardview:1.0.0")
 
     testImplementation("junit:junit:4.13.2")
 }

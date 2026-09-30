@@ -143,6 +143,48 @@ class TextProcessorTest {
     }
 
     @Test
+    fun `raw没有装饰时不算只差装饰`() {
+        // 回归用例：用户刚打完纯文本（无任何装饰），引擎要补前缀+后缀，
+        // 不能被“只差装饰”判定拦下，否则表现就是完全没反应。
+        val cfg = config().apply { enablePrefix = true }
+        val raw = "1236。？"
+        val target = TextProcessor.process(raw, cfg)
+        assertNotNull(TextProcessor.existingPrefix(target, cfg))
+        assertFalse(TextProcessor.isDecorationOnlyDiff(raw, target, cfg))
+    }
+
+    @Test
+    fun `raw已有装饰时只差颜文字才算`() {
+        val cfg = config().apply {
+            enablePrefix = true
+            prefixText = "唔…"
+            enableRandomEmoticon = true
+        }
+        val emoticons = cfg.getActiveEmoticons()
+        // 正文、前缀、后缀都一样，只有末尾颜文字不同 —— 这才是应当跳过写入的情况
+        val raw = "唔…本喵要吃饭喵 ${emoticons[0]}"
+        val target = "唔…本喵要吃饭喵 ${emoticons[1]}"
+        assertTrue(TextProcessor.isDecorationOnlyDiff(raw, target, cfg))
+    }
+
+    @Test
+    fun `关闭颜文字时不会把用户正文当成颜文字剥掉`() {
+        // 回归用例：功能关着时引擎不会加颜文字，剥离也必须跟着关，
+        // 否则用户自己打的、恰好长得像内置颜文字的正文会被误当成装饰。
+        val cfg = config().apply { enableRandomEmoticon = false }
+        val em = CatConfig.BUILTIN_EMOTICONS[0]
+        val text = "我要吃饭 $em"
+        assertEquals(text, TextProcessor.stripSuffixEmoticon(text, cfg))
+    }
+
+    @Test
+    fun `开启颜文字时会剥掉末尾颜文字`() {
+        val cfg = config().apply { enableRandomEmoticon = true }
+        val em = CatConfig.BUILTIN_EMOTICONS[0]
+        assertEquals("我要吃饭", TextProcessor.stripSuffixEmoticon("我要吃饭 $em", cfg))
+    }
+
+    @Test
     fun `自定义规则生效`() {
         val cfg = config().apply {
             enableWoToBenmiao = false

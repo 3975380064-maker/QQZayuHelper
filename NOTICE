@@ -1,0 +1,14 @@
+本工程包含的第三方内容
+========================
+
+Material Symbols
+----------------
+app/src/main/res/drawable/ic_*.xml 由 Google Material Symbols 图标集生成
+（仅做 SVG → Android VectorDrawable 的机械转换，未改动图形本身）。
+
+来源：https://fonts.google.com/icons
+版权：Copyright Google LLC
+许可：Apache License 2.0
+      https://www.apache.org/licenses/LICENSE-2.0
+
+如需替换或补充图标，请从同一来源获取，以保持风格一致。

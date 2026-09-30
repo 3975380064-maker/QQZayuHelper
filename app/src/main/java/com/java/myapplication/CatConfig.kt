@@ -10,7 +10,7 @@ class CatConfig {
     var enableRandomEmoticon: Boolean = true
     var customEmoticons: Array<String> = emptyArray()
     var enablePrefix: Boolean = false
-    var customPrefixes: Array<String> = emptyArray()
+    var prefixText: String = DEFAULT_PREFIX
     var processingMode: String = PUNCTUATION_MODE
     var woReplacement: String = "本喵"
     var niReplacement: String = "主人"
@@ -27,7 +27,7 @@ class CatConfig {
         private const val KEY_ENABLE_EMOTICON = "enable_emoticon"
         private const val KEY_CUSTOM_EMOTICONS = "custom_emoticons"
         private const val KEY_ENABLE_PREFIX = "enable_prefix"
-        private const val KEY_CUSTOM_PREFIXES = "custom_prefixes"
+        private const val KEY_PREFIX_TEXT = "prefix_text"
         private const val KEY_PROCESSING_MODE = "processing_mode"
         private const val KEY_WO_REPLACEMENT = "wo_replacement"
         private const val KEY_NI_REPLACEMENT = "ni_replacement"
@@ -37,13 +37,9 @@ class CatConfig {
 
         const val REAL_TIME_MODE = "real_time"
         const val PUNCTUATION_MODE = "punctuation"
+/** 开头前缀的默认值，和句尾后缀一样是个可直接编辑的短文本。 */
+        const val DEFAULT_PREFIX = "呼喵…"
 
-        /** 内置开头前缀，风格与句尾后缀、颜文字保持一致。 */
-        val BUILTIN_PREFIXES = arrayOf(
-            "呼喵…", "唔…", "呜喵…", "喵…", "嗯…", "呜…",
-            "呼噜…", "唔喵…", "喵呜…", "啊呜…", "呜姆…", "喵嗷…",
-            "咪…", "嗷…", "哼哼…", "唔姆…"
-        )
 
         val BUILTIN_EMOTICONS = arrayOf(
             "=^•ω•^=", "(=^･ω･^=)", "(>^ω^<)", "(=^.^=)", "(=^x^=)", "(=´ｪ`)", "≡ω≡",
@@ -89,15 +85,9 @@ class CatConfig {
             } else {
                 raw.split("\n").filter { it.isNotBlank() }.toTypedArray()
             }
+config.enablePrefix = prefs.getBoolean(KEY_ENABLE_PREFIX, false)
+            config.prefixText = prefs.getString(KEY_PREFIX_TEXT, DEFAULT_PREFIX) ?: DEFAULT_PREFIX
 
-            config.enablePrefix = prefs.getBoolean(KEY_ENABLE_PREFIX, false)
-
-            val prefixesRaw = prefs.getString(KEY_CUSTOM_PREFIXES, "")
-            config.customPrefixes = if (prefixesRaw.isNullOrEmpty()) {
-                emptyArray()
-            } else {
-                prefixesRaw.split("\n").filter { it.isNotBlank() }.toTypedArray()
-            }
 
             val rulesRaw = prefs.getString(KEY_CUSTOM_RULES, "")
             config.customRules = if (rulesRaw.isNullOrEmpty()) {
@@ -124,7 +114,7 @@ class CatConfig {
                 .putString(KEY_CUSTOM_EMOTICONS, config.customEmoticons.joinToString("\n"))
                 .putString(KEY_CUSTOM_RULES, config.customRules.joinToString("\n"))
                 .putBoolean(KEY_ENABLE_PREFIX, config.enablePrefix)
-                .putString(KEY_CUSTOM_PREFIXES, config.customPrefixes.joinToString("\n"))
+                .putString(KEY_PREFIX_TEXT, config.prefixText)
                 .apply()
         }
     }
@@ -133,7 +123,11 @@ class CatConfig {
         return if (customEmoticons.isNotEmpty()) customEmoticons else BUILTIN_EMOTICONS
     }
 
+    /**
+     * 前缀同样以数组形式提供给文本处理层（那边按数组取第一个命中项），
+     * 只是现在界面上一行就一个值，所以最多只有一个元素。
+     */
     fun getActivePrefixes(): Array<String> {
-        return if (customPrefixes.isNotEmpty()) customPrefixes else BUILTIN_PREFIXES
+        return if (prefixText.isBlank()) emptyArray() else arrayOf(prefixText)
     }
 }

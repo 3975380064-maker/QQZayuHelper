@@ -151,6 +151,43 @@ object TextProcessor {
     }
 
     /**
+     * 从文本末尾剥离颜文字，只保留内容部分。
+     *
+     * 必须跟着 [CatConfig.enableRandomEmoticon] 走：功能关着的时候引擎不会加颜文字，
+     * 这里要是照剥不误，用户自己打的、恰好长得像内置颜文字的正文就会被当成装饰，
+     * 进而把"该写入"误判成"只差装饰"而跳过。
+     */
+    fun stripSuffixEmoticon(text: String, cfg: CatConfig): String {
+        if (!cfg.enableRandomEmoticon) return text
+        for (em in cfg.getActiveEmoticons().sortedByDescending { it.length }) {
+            if (text.endsWith(" $em")) return text.substring(0, text.length - em.length - 1).trim()
+            if (text.endsWith(em)) return text.substring(0, text.length - em.length).trim()
+        }
+        return text
+    }
+
+    /** 剥掉全部装饰（开头前缀、句尾颜文字、句尾后缀），只留正文。 */
+    fun stripDecorations(text: String, cfg: CatConfig): String {
+        var result = stripPrefix(text, cfg)
+        result = stripSuffixEmoticon(result, cfg)
+        result = stripMeowSuffix(result, cfg)
+        return result.trim()
+    }
+
+    /**
+     * 判断 target 相对 raw 是否「只是装饰不同」，是的话就没必要重写输入框。
+     *
+     * 关键在于必须要求 raw **本身已经带装饰**。
+     * 少了这个条件就会出现这样的回归：用户刚打完纯文本（raw 无装饰），
+     * 引擎正想补上前缀/后缀，却因为「剥掉装饰后两边一样」被判定成
+     * 只是装饰不同而跳过写入 —— 表现就是怎么打都没有任何反应。
+     */
+    fun isDecorationOnlyDiff(raw: String, target: String, cfg: CatConfig): Boolean {
+        val rawStripped = stripDecorations(raw, cfg)
+        return rawStripped != raw && rawStripped == stripDecorations(target, cfg)
+    }
+
+    /**
      * 把用户原文加工成最终文本。
      *
      * @param keepPrefix 当前输入框里已经存在的前缀。传入它可以让前缀在一条消息内保持不变

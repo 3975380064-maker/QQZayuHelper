@@ -1,4 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 自适应图标背景（不随日夜切换） -->
     <color name="launcher_icon_background">#ffffffff</color>
+
+    <!--
+      品牌色（浅色）。
+      Material3 默认色板是从「紫色」推导出来的，如果只覆盖 colorPrimary，
+      其余面底色会保留一层淡淡的紫粉调（看起来就是"粉白"）。
+      所以下面把中性色阶整套覆盖成偏冷的灰，界面才会干净。
+    -->
+    <color name="brand_primary">#00639B</color>
+    <color name="brand_on_primary">#FFFFFF</color>
+    <color name="brand_primary_container">#CEE5FF</color>
+    <color name="brand_on_primary_container">#001D33</color>
+
+    <color name="neutral_background">#F3F5F8</color>
+    <color name="neutral_surface">#FFFFFF</color>
+    <color name="neutral_surface_container">#FFFFFF</color>
+    <color name="neutral_surface_container_high">#EDF0F4</color>
+    <color name="neutral_on_surface">#1B1F24</color>
+    <color name="neutral_on_surface_variant">#5A6068</color>
+    <color name="neutral_surface_variant">#E2E6EB</color>
+    <color name="neutral_outline">#A9B0B8</color>
+    <color name="neutral_outline_variant">#DCE1E6</color>
+
+    <!-- 服务状态的语义色（绿=已开启 / 红=未开启），深浅两套保证对比度 -->
+    <color name="status_on">#2E7D32</color>
+    <color name="status_off">#B3261E</color>
 </resources>

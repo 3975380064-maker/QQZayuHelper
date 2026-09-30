@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.Zayu.Card">
+
+    <LinearLayout style="@style/Widget.Zayu.CardContent">
+
+        <TextView
+            style="@style/Widget.Zayu.SectionTitle"
+            android:text="@string/section_switches"
+            app:drawableStartCompat="@drawable/ic_rules"
+            app:drawableTint="?attr/colorPrimary" />
+
+        <!-- 总开关 -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchEnabled"
+            style="@style/Widget.Zayu.Switch"
+            android:layout_marginTop="4dp"
+            android:text="@string/switch_master_title" />
+
+        <TextView
+            style="@style/Widget.Zayu.SectionSummary"
+            android:text="@string/switch_master_summary" />
+
+        <View style="@style/Widget.Zayu.Divider" />
+
+        <!-- 句尾后缀 -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchMeow"
+            style="@style/Widget.Zayu.Switch"
+            android:text="@string/switch_meow" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/meowRow"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/hint_meow_suffix"
+            app:helperText="@string/helper_meow_suffix"
+            app:helperTextEnabled="true">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etMeowSuffix"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <View style="@style/Widget.Zayu.Divider" />
+
+        <!-- 我 -> 本喵 -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchWo"
+            style="@style/Widget.Zayu.Switch"
+            android:text="@string/switch_wo" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/woRow"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/hint_wo_replacement"
+            app:helperText="@string/helper_wo_replacement"
+            app:helperTextEnabled="true">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etWoReplacement"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <View style="@style/Widget.Zayu.Divider" />
+
+        <!-- 你 -> 主人 -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchNi"
+            style="@style/Widget.Zayu.Switch"
+            android:text="@string/switch_ni" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/niRow"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/hint_ni_replacement"
+            app:helperText="@string/helper_ni_replacement"
+            app:helperTextEnabled="true">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etNiReplacement"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <View style="@style/Widget.Zayu.Divider" />
+
+        <!-- 句首前缀：和「句尾加后缀」完全对称的一行 -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchPrefix"
+            style="@style/Widget.Zayu.Switch"
+            android:text="@string/switch_prefix" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/prefixRow"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/hint_prefix"
+            app:helperText="@string/helper_prefix"
+            app:helperTextEnabled="true">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etPrefix"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <View style="@style/Widget.Zayu.Divider" />
+
+        <!-- 句尾随机颜文字没有配套输入框，放到最末，
+             免得夹在两组「开关 + 输入框」中间显得突兀 -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchEmoticon"
+            style="@style/Widget.Zayu.Switch"
+            android:text="@string/switch_emoticon" />
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

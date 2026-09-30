@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.Zayu.Card">
+
+    <LinearLayout style="@style/Widget.Zayu.CardContent">
+
+        <TextView
+            style="@style/Widget.Zayu.SectionTitle"
+            android:text="@string/section_about"
+            app:drawableStartCompat="@drawable/ic_info"
+            app:drawableTint="?attr/colorPrimary" />
+
+        <TextView
+            android:id="@+id/tvVersion"
+            style="@style/Widget.Zayu.SectionSummary"
+            android:layout_marginTop="6dp"
+            tools:text="版本 1.9" />
+
+        <TextView
+            style="@style/Widget.Zayu.SectionSummary"
+            android:text="@string/about_author" />
+
+        <!-- 项目主页：整行可点 -->
+        <LinearLayout
+            android:id="@+id/rowGithub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_github"
+                app:tint="?attr/colorPrimary" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:text="@string/action_github"
+                android:textAppearance="?attr/textAppearanceBodyLarge"
+                android:textColor="?attr/colorOnSurface" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_arrow"
+                app:tint="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <View style="@style/Widget.Zayu.Divider" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCheckUpdate"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/action_check_update"
+            app:icon="@drawable/ic_update" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBatteryOptimization"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/action_battery_optimization"
+            app:icon="@drawable/ic_battery" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAutostart"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/action_autostart"
+            app:icon="@drawable/ic_autostart" />
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

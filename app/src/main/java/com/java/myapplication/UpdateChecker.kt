@@ -145,7 +145,7 @@ object UpdateChecker {
      */
     fun downloadUpdate(context: Context, onStart: () -> Unit, onComplete: (DownloadResult) -> Unit) {
         if (isDownloading) {
-            Toast.makeText(context, "下载中，请稍候...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.toast_downloading, Toast.LENGTH_SHORT).show()
             return
         }
         isDownloading = true

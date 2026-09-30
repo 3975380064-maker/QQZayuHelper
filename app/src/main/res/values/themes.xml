@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      浅色主题。与 values-night/themes.xml 同名，系统切深色时自动改用那一份。
+
+      关键点：Material3 默认色板由紫色推导而来，只覆盖 colorPrimary 的话，
+      面底色会残留紫粉调（用户看到的就是"粉白"）。所以这里把中性色阶整套覆盖成冷灰。
+      布局里不出现任何具体色值，颜色全部从这里取。
+    -->
+    <style name="Theme.Zayu" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand_primary</item>
+        <item name="colorOnPrimary">@color/brand_on_primary</item>
+        <item name="colorPrimaryContainer">@color/brand_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/brand_on_primary_container</item>
+
+        <!-- 中性色阶 -->
+        <item name="android:colorBackground">@color/neutral_background</item>
+        <item name="android:windowBackground">@color/neutral_background</item>
+        <item name="colorSurface">@color/neutral_surface</item>
+        <item name="colorSurfaceContainer">@color/neutral_surface_container</item>
+        <!-- Filled 卡片用的是这一档，浅色下给纯白，配合灰底会显得干净 -->
+        <item name="colorSurfaceContainerHighest">@color/neutral_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/neutral_surface_container_high</item>
+        <item name="colorOnSurface">@color/neutral_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/neutral_on_surface_variant</item>
+        <item name="colorSurfaceVariant">@color/neutral_surface_variant</item>
+        <item name="colorOutline">@color/neutral_outline</item>
+        <item name="colorOutlineVariant">@color/neutral_outline_variant</item>
+
+        <!-- 状态栏 / 导航栏跟随界面底色，图标为深色（浅色主题） -->
+        <item name="android:statusBarColor">@color/neutral_surface</item>
+        <item name="android:navigationBarColor">@color/neutral_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
+    </style>
+
+</resources>

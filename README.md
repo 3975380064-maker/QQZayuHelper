@@ -103,4 +103,8 @@ app/src/main/java/com/java/myapplication/
 
 ## 开源许可
 
-本项目基于 MIT 许可证开源。
+本项目基于 MIT 许可证开源，完整文本见 `LICENSE`。
+
+界面图标来自 Google Material Symbols（Apache-2.0），来源与许可见 `NOTICE`。
+
+各版本的改动记录见 `CHANGELOG.md`。
