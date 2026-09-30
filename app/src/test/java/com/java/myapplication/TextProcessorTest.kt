@@ -2,6 +2,7 @@ package com.java.myapplication
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -95,6 +96,50 @@ class TextProcessorTest {
         }
         val text = "你好，吃饭"
         assertEquals(text.length, TextProcessor.contentEnd(text, cfg))
+    }
+
+    @Test
+    fun `开启前缀后会加上前缀且可剥离`() {
+        val cfg = config().apply { enablePrefix = true }
+        val out = TextProcessor.process("我要吃饭", cfg)
+        assertTrue(out.endsWith("本喵要吃饭喵"))
+        assertTrue(out.length > "本喵要吃饭喵".length)
+        assertEquals("本喵要吃饭喵", TextProcessor.stripPrefix(out, cfg))
+    }
+
+    @Test
+    fun `关闭前缀时不加也不剥`() {
+        val out = TextProcessor.process("我要吃饭", config())
+        assertEquals("本喵要吃饭喵", out)
+        assertEquals("唔…本喵要吃饭喵", TextProcessor.stripPrefix("唔…本喵要吃饭喵", config()))
+    }
+
+    @Test
+    fun `keepPrefix会沿用已有前缀`() {
+        val cfg = config().apply { enablePrefix = true }
+        val first = TextProcessor.process("我要吃饭", cfg)
+        val prefix = TextProcessor.existingPrefix(first, cfg)
+        assertNotNull(prefix)
+        // 内容变化后仍沿用同一个前缀，否则用户续写时前缀会跳变
+        val second = TextProcessor.process("我要吃饭哈", cfg, prefix)
+        assertEquals(prefix, TextProcessor.existingPrefix(second, cfg))
+        assertTrue(second.endsWith("本喵要吃饭哈喵"))
+    }
+
+    @Test
+    fun `前缀选择是确定性的`() {
+        val cfg = config().apply { enablePrefix = true }
+        assertEquals(TextProcessor.process("我要吃饭", cfg), TextProcessor.process("我要吃饭", cfg))
+    }
+
+    @Test
+    fun `existingPrefix与contentStart一致`() {
+        val cfg = config().apply { enablePrefix = true }
+        val out = TextProcessor.process("我要吃饭", cfg)
+        val prefix = TextProcessor.existingPrefix(out, cfg)!!
+        assertEquals(prefix.length, TextProcessor.contentStart(out, cfg))
+        // 没有前缀时 contentStart 为 0
+        assertEquals(0, TextProcessor.contentStart("我要吃饭", cfg))
     }
 
     @Test

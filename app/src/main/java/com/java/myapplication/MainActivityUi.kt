@@ -68,6 +68,9 @@ class MainActivityUi(
         rootLayout.addView(ui.createSectionTitle("自定义表情"))
         rootLayout.addView(buildEmoticonCard())
 
+        rootLayout.addView(ui.createSectionTitle("自定义前缀"))
+        rootLayout.addView(buildPrefixCard())
+
         rootLayout.addView(ui.createSectionTitle("自定义替换规则"))
         rootLayout.addView(buildRulesCard())
 
@@ -185,6 +188,8 @@ class MainActivityUi(
         layout.addView(form.niRow)
         layout.addView(ui.createThinDivider())
         layout.addView(form.switchEmoticon)
+        layout.addView(ui.createThinDivider())
+        layout.addView(form.switchPrefix)
         card.addView(layout)
         return card
     }
@@ -211,6 +216,24 @@ class MainActivityUi(
         layout.addView(ui.createLabel("每行一个，留空则使用默认表情"))
         layout.addView(
             form.etCustomEmoticons,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        card.addView(layout)
+        return card
+    }
+
+    private fun buildPrefixCard(): View {
+        val card = ui.createCard()
+        val layout = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 16, 24, 16)
+        }
+        layout.addView(ui.createLabel("每行一个，留空则使用默认前缀"))
+        layout.addView(
+            form.etCustomPrefixes,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT

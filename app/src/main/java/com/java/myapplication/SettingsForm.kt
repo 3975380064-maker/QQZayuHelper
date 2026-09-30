@@ -33,6 +33,7 @@ class SettingsForm(private val ui: UiKit, private val onChanged: () -> Unit) {
     val etNiReplacement: TextInputEditText
 
     val switchEmoticon = ui.createSwitch("随机添加后缀表情", true, ::notifyChanged)
+    val switchPrefix = ui.createSwitch("开头加前缀", false, ::notifyChanged)
 
     val radioGroup = ui.createRadioGroup(::notifyChanged)
     val rbRealtime = ui.createRadioButton("智能模式")
@@ -43,6 +44,7 @@ class SettingsForm(private val ui: UiKit, private val onChanged: () -> Unit) {
 
     val etCustomEmoticons = ui.createMultilineEditor(4)
     val etCustomRules = ui.createMultilineEditor(3)
+    val etCustomPrefixes = ui.createMultilineEditor(3)
 
     init {
         val (meowEdit, meowLayout) = ui.createTextInputRow("句尾后缀", "喵、唔喵、咩...")
@@ -67,7 +69,7 @@ class SettingsForm(private val ui: UiKit, private val onChanged: () -> Unit) {
 
         attachAutoSave(
             etMeowSuffix, etWoReplacement, etNiReplacement,
-            etIdleDelay, etCustomEmoticons, etCustomRules
+            etIdleDelay, etCustomEmoticons, etCustomRules, etCustomPrefixes
         )
     }
 
@@ -90,10 +92,12 @@ class SettingsForm(private val ui: UiKit, private val onChanged: () -> Unit) {
         switchWoToBenmiao.isChecked = config.enableWoToBenmiao
         switchNiToZhuren.isChecked = config.enableNiToZhuren
         switchEmoticon.isChecked = config.enableRandomEmoticon
+        switchPrefix.isChecked = config.enablePrefix
         rbRealtime.isChecked = config.processingMode == CatConfig.REAL_TIME_MODE
         rbPunctuation.isChecked = config.processingMode != CatConfig.REAL_TIME_MODE
         etCustomEmoticons.setText(config.customEmoticons.joinToString("\n"))
         etCustomRules.setText(config.customRules.joinToString("\n"))
+        etCustomPrefixes.setText(config.customPrefixes.joinToString("\n"))
         etWoReplacement.setText(config.woReplacement)
         etNiReplacement.setText(config.niReplacement)
         etMeowSuffix.setText(config.meowSuffix)
@@ -109,10 +113,12 @@ class SettingsForm(private val ui: UiKit, private val onChanged: () -> Unit) {
         config.enableWoToBenmiao = switchWoToBenmiao.isChecked
         config.enableNiToZhuren = switchNiToZhuren.isChecked
         config.enableRandomEmoticon = switchEmoticon.isChecked
+        config.enablePrefix = switchPrefix.isChecked
         config.processingMode =
             if (rbRealtime.isChecked) CatConfig.REAL_TIME_MODE else CatConfig.PUNCTUATION_MODE
         config.customEmoticons = splitLines(etCustomEmoticons)
         config.customRules = splitLines(etCustomRules)
+        config.customPrefixes = splitLines(etCustomPrefixes)
 
         // 替换词留空时保留原值，避免用户清空输入框把功能弄坏
         textOrNull(etWoReplacement)?.let { config.woReplacement = it }

@@ -11,6 +11,9 @@ object TextProcessor {
 
     private val SENTENCE_SPLIT_PATTERN = Pattern.compile("([，。！？\\s]+)")
 
+    /** 前缀选择用的盐，避免和颜文字的哈希选到同一个下标。 */
+    private const val PREFIX_SEED_SALT = "\u0000prefix"
+
     private fun addMeow(text: String, suffix: String): String {
         val parts = mutableListOf<String>()
         val separators = mutableListOf<String>()
@@ -107,8 +110,54 @@ object TextProcessor {
         return emoticons[index]
     }
 
-    /** 把用户原文加工成最终文本。 */
-    fun process(original: String, config: CatConfig): String {
+    /** 同上，确定性选择开头前缀。加盐是为了让它和颜文字的选择互不相关。 */
+    private fun pickPrefix(seed: String, config: CatConfig): String {
+        val prefixes = config.getActivePrefixes()
+        if (prefixes.isEmpty()) return ""
+        val index = (seed + PREFIX_SEED_SALT).hashCode().and(Int.MAX_VALUE) % prefixes.size
+        return prefixes[index]
+    }
+
+    /**
+     * 取出文本开头已有的前缀；没有则返回 null。
+     *
+     * 这条消息一旦加过前缀，后续触发就应该沿用它而不是重新挑，
+     * 否则用户每续写一句，前缀都会在眼皮底下跳变。
+     */
+    fun existingPrefix(text: String, cfg: CatConfig): String? {
+        if (!cfg.enablePrefix) return null
+        val start = text.indexOfFirst { !it.isWhitespace() }
+        if (start < 0) return null
+        for (prefix in cfg.getActivePrefixes().sortedByDescending { it.length }) {
+            if (text.startsWith(prefix, start)) return prefix
+        }
+        return null
+    }
+
+    /** 开头前缀的结束下标（跳过前导空白后匹配）；没有前缀返回 0。 */
+    private fun prefixEndOf(text: String, cfg: CatConfig): Int {
+        val prefix = existingPrefix(text, cfg) ?: return 0
+        val start = text.indexOfFirst { !it.isWhitespace() }
+        return start + prefix.length
+    }
+
+    /** 正文的起始下标（即开头前缀之后），光标映射用。 */
+    fun contentStart(text: String, cfg: CatConfig): Int = prefixEndOf(text, cfg)
+
+    /** [pickPrefix] 的逆操作：剥掉开头前缀。 */
+    fun stripPrefix(text: String, cfg: CatConfig): String {
+        val end = prefixEndOf(text, cfg)
+        return if (end == 0) text else text.substring(end).trimStart()
+    }
+
+    /**
+     * 把用户原文加工成最终文本。
+     *
+     * @param keepPrefix 当前输入框里已经存在的前缀。传入它可以让前缀在一条消息内保持不变
+     * （引擎每次触发都会调用本方法，若每次都重新挑，前缀会随内容变化而跳变）。
+     * 传 null 表示这条消息还没有前缀，需要新挑一个。
+     */
+    fun process(original: String, config: CatConfig, keepPrefix: String? = null): String {
         if (original.isBlank()) return original
 
         var text = original.trim()
@@ -127,6 +176,14 @@ object TextProcessor {
                 if (emoticon.isNotEmpty()) {
                     text = "$text $emoticon"
                 }
+            }
+        }
+        // 前缀最后加：放前面会被 addMeow 当成句首片段，可能被多插一个后缀。
+        // 已有前缀就沿用，保证一条消息内前缀稳定。
+        if (config.enablePrefix) {
+            val prefix = keepPrefix?.takeIf { it.isNotEmpty() } ?: pickPrefix(text, config)
+            if (prefix.isNotEmpty()) {
+                text = "$prefix$text"
             }
         }
         return text

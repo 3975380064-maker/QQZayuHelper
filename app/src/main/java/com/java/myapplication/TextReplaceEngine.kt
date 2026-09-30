@@ -213,21 +213,21 @@ class TextReplaceEngine(private val service: AccessibilityService) {
 
                     if (userOriginal.isEmpty()) return
 
-                    val target = TextProcessor.process(userOriginal, cfg)
+                    // 沿用输入框里已有的前缀，保证一条消息内前缀稳定（触发会反复发生，重挑就会跳变）
+                    val target = TextProcessor.process(userOriginal, cfg, TextProcessor.existingPrefix(raw, cfg))
                     if (target == raw) {
                         lastSet = target
                         return
                     }
 
-                    // 如果 target 和 raw 仅颜文字不同，跳过写入（避免反复随机颜文字导致死循环）
-                    if (cfg.enableRandomEmoticon && target != raw) {
-                        val rawStripped = stripSuffixEmoticon(raw, cfg)
-                        val targetStripped = stripSuffixEmoticon(target, cfg)
-                        if (rawStripped == targetStripped) {
-                            Log.d(TAG, "仅颜文字选择不同，跳过写入: raw=$raw target=$target")
-                            lastSet = target
-                            return
-                        }
+                    // target 与 raw 若只差装饰（开头前缀 / 句尾颜文字 / 句尾后缀），跳过写入。
+                    // 为了换个装饰而重写整个输入框，既突兀又会把光标拉到末尾。
+                    if (stripDecorations(raw, cfg) == stripDecorations(target, cfg)) {
+                        Log.d(TAG, "仅装饰不同，跳过写入: raw=$raw target=$target")
+                        // 跳过了写入，框里实际还是 raw，lastSet 必须记录真实状态，
+                        // 否则下一个事件会走“重新剥离”那条更脆弱的路径
+                        lastSet = raw
+                        return
                     }
 
                     Log.d(TAG, "写入: raw=$raw  userOriginal=$userOriginal  target=$target")
@@ -258,7 +258,8 @@ class TextReplaceEngine(private val service: AccessibilityService) {
      * 只剥离引擎已知追加的部分（句尾后缀、表情、替换词），不做全局替换。
      */
     private fun stripEngineOutput(text: String, cfg: CatConfig): String {
-        var result = text
+        // 0. 剥离开头前缀（与 process 里的添加顺序相反）
+        var result = TextProcessor.stripPrefix(text, cfg)
 
         // 1. 剥离句尾表情（只从末尾剥离一次，带空格情况）
         if (cfg.enableRandomEmoticon) {
@@ -288,20 +289,42 @@ class TextReplaceEngine(private val service: AccessibilityService) {
      * 避免光标跳到末尾。
      */
     private fun mapCursorPosition(raw: String, cursorPos: Int, target: String, cfg: CatConfig): Int {
+        if (cursorPos <= 0) return target.length
+
+        val rawContentStart = TextProcessor.contentStart(raw, cfg)
+        val targetContentStart = TextProcessor.contentStart(target, cfg)
+
+        // 光标落在开头前缀里：映射到目标文本“前缀之后”的位置
+        if (rawContentStart > 0 && cursorPos <= rawContentStart) return targetContentStart
+
         // 光标在末尾装饰（颜文字/后缀）里或就在末尾时按内容末尾处理，
         // 否则 substring 会把颜文字截成半个，映射出的位置会偏
-        if (cursorPos <= 0 || cursorPos >= TextProcessor.contentEnd(raw, cfg)) return target.length
-        val rawPrefix = raw.substring(0, cursorPos)
+        if (cursorPos >= TextProcessor.contentEnd(raw, cfg)) return target.length
+
+        // 只取正文部分（跳过前缀），映射结果再加上目标文本自身的前缀长度
+        val rawPrefix = raw.substring(rawContentStart, cursorPos)
         val userPrefix = stripEngineOutput(rawPrefix, cfg)
-        if (userPrefix.isEmpty()) return target.length
+        if (userPrefix.isEmpty()) return targetContentStart
+
         // 只应用替换变换，不加后缀/颜文字
         val mapped = applyReplacementsOnly(userPrefix, cfg)
-        return mapped.length.coerceIn(0, target.length)
+        return (targetContentStart + mapped.length).coerceIn(0, target.length)
     }
 
     /** 只应用替换变换（我/你/自定义规则），不加后缀/颜文字 */
     private fun applyReplacementsOnly(text: String, cfg: CatConfig): String =
         ReplaceRules.apply(text, cfg)
+
+    /**
+     * 剥掉全部装饰（开头前缀、句尾颜文字、句尾后缀），只留正文。
+     * 用于判断两份文本是否“只差装饰”，从而避免无谓的重写。
+     */
+    private fun stripDecorations(text: String, cfg: CatConfig): String {
+        var result = TextProcessor.stripPrefix(text, cfg)
+        result = stripSuffixEmoticon(result, cfg)
+        result = TextProcessor.stripMeowSuffix(result, cfg)
+        return result.trim()
+    }
 
     /** 从文本末尾剥离颜文字，只保留内容部分 */
     private fun stripSuffixEmoticon(text: String, cfg: CatConfig): String {

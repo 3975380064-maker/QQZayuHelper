@@ -9,6 +9,8 @@ class CatConfig {
     var enableNiToZhuren: Boolean = false
     var enableRandomEmoticon: Boolean = true
     var customEmoticons: Array<String> = emptyArray()
+    var enablePrefix: Boolean = false
+    var customPrefixes: Array<String> = emptyArray()
     var processingMode: String = PUNCTUATION_MODE
     var woReplacement: String = "本喵"
     var niReplacement: String = "主人"
@@ -24,6 +26,8 @@ class CatConfig {
         private const val KEY_ENABLE_NI = "enable_ni"
         private const val KEY_ENABLE_EMOTICON = "enable_emoticon"
         private const val KEY_CUSTOM_EMOTICONS = "custom_emoticons"
+        private const val KEY_ENABLE_PREFIX = "enable_prefix"
+        private const val KEY_CUSTOM_PREFIXES = "custom_prefixes"
         private const val KEY_PROCESSING_MODE = "processing_mode"
         private const val KEY_WO_REPLACEMENT = "wo_replacement"
         private const val KEY_NI_REPLACEMENT = "ni_replacement"
@@ -33,6 +37,13 @@ class CatConfig {
 
         const val REAL_TIME_MODE = "real_time"
         const val PUNCTUATION_MODE = "punctuation"
+
+        /** 内置开头前缀，风格与句尾后缀、颜文字保持一致。 */
+        val BUILTIN_PREFIXES = arrayOf(
+            "呼喵…", "唔…", "呜喵…", "喵…", "嗯…", "呜…",
+            "呼噜…", "唔喵…", "喵呜…", "啊呜…", "呜姆…", "喵嗷…",
+            "咪…", "嗷…", "哼哼…", "唔姆…"
+        )
 
         val BUILTIN_EMOTICONS = arrayOf(
             "=^•ω•^=", "(=^･ω･^=)", "(>^ω^<)", "(=^.^=)", "(=^x^=)", "(=´ｪ`)", "≡ω≡",
@@ -79,6 +90,15 @@ class CatConfig {
                 raw.split("\n").filter { it.isNotBlank() }.toTypedArray()
             }
 
+            config.enablePrefix = prefs.getBoolean(KEY_ENABLE_PREFIX, false)
+
+            val prefixesRaw = prefs.getString(KEY_CUSTOM_PREFIXES, "")
+            config.customPrefixes = if (prefixesRaw.isNullOrEmpty()) {
+                emptyArray()
+            } else {
+                prefixesRaw.split("\n").filter { it.isNotBlank() }.toTypedArray()
+            }
+
             val rulesRaw = prefs.getString(KEY_CUSTOM_RULES, "")
             config.customRules = if (rulesRaw.isNullOrEmpty()) {
                 emptyArray()
@@ -103,11 +123,17 @@ class CatConfig {
                 .putInt(KEY_IDLE_DELAY, config.idleDelayMs)
                 .putString(KEY_CUSTOM_EMOTICONS, config.customEmoticons.joinToString("\n"))
                 .putString(KEY_CUSTOM_RULES, config.customRules.joinToString("\n"))
+                .putBoolean(KEY_ENABLE_PREFIX, config.enablePrefix)
+                .putString(KEY_CUSTOM_PREFIXES, config.customPrefixes.joinToString("\n"))
                 .apply()
         }
     }
 
     fun getActiveEmoticons(): Array<String> {
         return if (customEmoticons.isNotEmpty()) customEmoticons else BUILTIN_EMOTICONS
+    }
+
+    fun getActivePrefixes(): Array<String> {
+        return if (customPrefixes.isNotEmpty()) customPrefixes else BUILTIN_PREFIXES
     }
 }
