@@ -11,3 +11,20 @@ make_icons.sh
 .operit/
 .kotlin/
 *.apk
+
+# 反编译产物：体积大且含第三方源码，不入库
+jadx_out_xmtext/
+tools/xmtext_jadx/
+*.jadx/
+
+# 构建中间产物与日志
+.externalNativeBuild/
+.cxx/
+captures/
+*.log
+
+# 签名材料：严禁入库
+*.jks
+*.keystore
+keystore.properties
+signing/
