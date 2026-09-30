@@ -78,6 +78,26 @@ class TextProcessorTest {
     }
 
     @Test
+    fun `contentEnd跳过末尾装饰`() {
+        val cfg = config().apply { enableRandomEmoticon = true }
+        val processed = TextProcessor.process("你好，吃饭", cfg)
+        val content = "你好喵，吃饭"
+        assertTrue(processed.startsWith(content))
+        // 末尾的后缀与颜文字都应被跳过，避免光标映射切出半个颜文字
+        assertEquals(content.length, TextProcessor.contentEnd(processed, cfg))
+    }
+
+    @Test
+    fun `没有装饰时contentEnd就是文本长度`() {
+        val cfg = config().apply {
+            enableMeow = false
+            enableRandomEmoticon = false
+        }
+        val text = "你好，吃饭"
+        assertEquals(text.length, TextProcessor.contentEnd(text, cfg))
+    }
+
+    @Test
     fun `自定义规则生效`() {
         val cfg = config().apply {
             enableWoToBenmiao = false

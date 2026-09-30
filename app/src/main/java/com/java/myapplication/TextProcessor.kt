@@ -66,6 +66,36 @@ object TextProcessor {
     }
 
     /**
+     * 返回末尾“装饰”（句尾后缀 + 颜文字）的起始下标。
+     *
+     * 光标映射时用：光标如果落在装饰里，说明用户并不是想在中间插字，
+     * 直接按内容末尾处理即可，否则会把颜文字截成半个。
+     */
+    fun contentEnd(text: String, cfg: CatConfig): Int {
+        var end = text.length
+        if (cfg.enableRandomEmoticon) {
+            for (em in cfg.getActiveEmoticons().sortedByDescending { it.length }) {
+                val spaced = " $em"
+                if (text.endsWith(spaced) && text.length > spaced.length) {
+                    end = text.length - spaced.length
+                    break
+                }
+                if (text.endsWith(em) && text.length > em.length) {
+                    end = text.length - em.length
+                    break
+                }
+            }
+        }
+        if (cfg.enableMeow && cfg.meowSuffix.isNotEmpty() && end >= cfg.meowSuffix.length) {
+            val start = end - cfg.meowSuffix.length
+            if (text.startsWith(cfg.meowSuffix, start)) {
+                end = start
+            }
+        }
+        return end
+    }
+
+    /**
      * 根据文本内容确定性地选择颜文字。
      * 用文本内容做种子而不是随机数，避免同一段文本每次处理得到不同装饰、
      * 进而反复写回输入框打断用户输入。

@@ -75,6 +75,10 @@ class TextReplaceEngine(private val service: AccessibilityService) {
             }
 
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
+                // QQ 里还有搜索框等其它输入框，它们的事件会污染 lastTextLength 等状态，
+                // 导致智能模式的空闲任务被误取消，这里只处理输入框自身的事件
+                if (!isFromInputBox(event)) return
+
                 val cfg = loadConfig()
                 val mode = cfg.processingMode
 
@@ -99,6 +103,21 @@ class TextReplaceEngine(private val service: AccessibilityService) {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * 判断文本变化事件是否来自 QQ 输入框本身。
+     * 取不到来源信息时按“是输入框”处理，避免误伤主流程。
+     */
+    private fun isFromInputBox(event: AccessibilityEvent): Boolean {
+        val source = event.source ?: return true
+        return try {
+            val viewId = source.viewIdResourceName
+            viewId == null || viewId == ID_INPUT
+        } finally {
+            @Suppress("DEPRECATION")
+            source.recycle()
         }
     }
 
@@ -269,7 +288,9 @@ class TextReplaceEngine(private val service: AccessibilityService) {
      * 避免光标跳到末尾。
      */
     private fun mapCursorPosition(raw: String, cursorPos: Int, target: String, cfg: CatConfig): Int {
-        if (cursorPos <= 0 || cursorPos >= raw.length) return target.length
+        // 光标在末尾装饰（颜文字/后缀）里或就在末尾时按内容末尾处理，
+        // 否则 substring 会把颜文字截成半个，映射出的位置会偏
+        if (cursorPos <= 0 || cursorPos >= TextProcessor.contentEnd(raw, cfg)) return target.length
         val rawPrefix = raw.substring(0, cursorPos)
         val userPrefix = stripEngineOutput(rawPrefix, cfg)
         if (userPrefix.isEmpty()) return target.length

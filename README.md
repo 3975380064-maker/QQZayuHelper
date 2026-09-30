@@ -80,11 +80,14 @@ keyPassword=******
 
 ```
 app/src/main/java/com/java/myapplication/
-├── MainActivity.kt            界面与配置读写
+├── MainActivity.kt            生命周期、服务状态、权限引导、更新入口
+├── MainActivityUi.kt          界面布局搭建（只摆控件、接线回调）
+├── SettingsForm.kt            配置控件持有 + CatConfig 双向绑定
+├── UiKit.kt                   配色与控件工厂
 ├── QQAccessibilityService.kt  无障碍服务，只做事件路由
 ├── TextReplaceEngine.kt       核心引擎：事件处理、输入框定位、写回、光标映射
-├── TextProcessor.kt           文本加工流水线（纯函数）
-├── ReplaceRules.kt            替换规则的正向/逆向变换（纯函数）
+├── TextProcessor.kt           文本加工流水线（纯函数，可单测）
+├── ReplaceRules.kt            替换规则的正向/逆向变换（纯函数，可单测）
 ├── CatConfig.kt               SharedPreferences 配置读写
 ├── UpdateChecker.kt           版本检查、下载与安装包校验
 └── AutoStartHelper.kt         各厂商自启动管理页跳转

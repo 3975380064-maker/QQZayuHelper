@@ -2,8 +2,6 @@ package com.java.myapplication
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageInfo
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -17,7 +15,6 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 
 /**
  * 更新检查器。
@@ -174,7 +171,7 @@ object UpdateChecker {
 
     private fun runDownload(context: Context): DownloadResult {
         val pm = context.packageManager
-        val installed = getInstalledInfo(context) ?: run {
+        val installed = ApkVerifier.installedInfo(context.packageManager, context.packageName) ?: run {
             Log.w(TAG, "读取当前版本信息失败")
             return DownloadResult.FAILED
         }
@@ -205,27 +202,30 @@ object UpdateChecker {
                 continue
             }
 
-            val candidate = readPackageInfo(pm, target)
+            val candidate = ApkVerifier.readPackageInfo(pm, target)
             if (candidate == null || candidate.packageName != context.packageName) {
                 Log.w(TAG, "源[$index] 不是本应用的合法 APK，丢弃")
                 sawInvalid = true
                 target.delete()
                 continue
             }
-            if (!hasSameSigner(installed, candidate)) {
+            if (!ApkVerifier.hasSameSigner(installed, candidate)) {
                 Log.w(TAG, "源[$index] 签名与当前版本不一致，拒绝安装（疑似镜像投毒）")
                 sawInvalid = true
                 target.delete()
                 continue
             }
-            if (!isNewer(candidate, installed)) {
+            if (!ApkVerifier.isNewer(candidate, installed)) {
                 Log.i(TAG, "源[$index] 版本未高于当前（${candidate.versionName}），无需安装")
                 sawNotNewer = true
                 target.delete()
                 continue
             }
 
-            Log.i(TAG, "源[$index] 校验通过：${candidate.versionName}(${versionCodeOf(candidate)})")
+            Log.i(
+                TAG,
+                "源[$index] 校验通过：${candidate.versionName}(${ApkVerifier.versionCodeOf(candidate)})"
+            )
             return DownloadResult.SUCCESS
         }
 
@@ -307,64 +307,6 @@ object UpdateChecker {
             false
         }
     }
-
-    /** 读取已安装应用自身的签名信息，作为可信基准。 */
-    private fun getInstalledInfo(context: Context): PackageInfo? = try {
-        @Suppress("DEPRECATION")
-        context.packageManager.getPackageInfo(context.packageName, signerFlags())
-    } catch (e: Exception) {
-        Log.w(TAG, "读取已安装包信息失败", e)
-        null
-    }
-
-    private fun readPackageInfo(pm: PackageManager, file: File): PackageInfo? = try {
-        @Suppress("DEPRECATION")
-        pm.getPackageArchiveInfo(file.absolutePath, signerFlags())
-    } catch (e: Exception) {
-        Log.w(TAG, "解析 APK 失败（可能是截断或损坏的包）", e)
-        null
-    }
-
-    private fun signerFlags(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            PackageManager.GET_SIGNING_CERTIFICATES
-        } else {
-            @Suppress("DEPRECATION")
-            PackageManager.GET_SIGNATURES
-        }
-
-    private fun hasSameSigner(installed: PackageInfo, candidate: PackageInfo): Boolean {
-        val expected = signerDigests(installed)
-        val actual = signerDigests(candidate)
-        return expected.isNotEmpty() && expected == actual
-    }
-
-    private fun signerDigests(info: PackageInfo): Set<String> {
-        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.signingInfo?.apkContentsSigners
-        } else {
-            @Suppress("DEPRECATION")
-            info.signatures
-        } ?: return emptySet()
-        return signatures.mapNotNull { signature ->
-            signature?.toByteArray()?.let { sha256(it) }
-        }.toSet()
-    }
-
-    private fun sha256(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { "%02x".format(it) }
-
-    private fun versionCodeOf(info: PackageInfo): Long =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.longVersionCode
-        } else {
-            @Suppress("DEPRECATION")
-            info.versionCode.toLong()
-        }
-
-    private fun isNewer(candidate: PackageInfo, installed: PackageInfo): Boolean =
-        versionCodeOf(candidate) > versionCodeOf(installed)
 
     private fun installApk(context: Context) {
         try {
