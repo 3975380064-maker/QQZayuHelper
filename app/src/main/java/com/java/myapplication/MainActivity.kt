@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
@@ -16,6 +15,7 @@ import android.view.View
 import android.view.accessibility.AccessibilityManager
 import android.widget.*
 import androidx.cardview.widget.CardView
+import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.radiobutton.MaterialRadioButton
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -216,13 +216,13 @@ class MainActivity : Activity() {
             text = "智能模式"
             textSize = 15f
             setTextColor(colorTextPrimary)
-            id = 1
+            id = View.generateViewId()
         }
         rbPunctuation = MaterialRadioButton(this).apply {
             text = "标点模式"
             textSize = 15f
             setTextColor(colorTextPrimary)
-            id = 2
+            id = View.generateViewId()
         }
         radioGroup.addView(rbRealtime)
         radioGroup.addView(rbPunctuation)
@@ -352,6 +352,13 @@ class MainActivity : Activity() {
         scrollView.addView(rootLayout)
         setContentView(scrollView)
 
+        // 文本框也纳入自动保存（开关/单选在各自的监听里已处理）
+        attachAutoSave(
+            etMeowSuffix, etWoReplacement, etNiReplacement,
+            etIdleDelay, etCustomEmoticons, etCustomRules
+        )
+        // 清理上一次遗留的更新包
+        UpdateChecker.cleanUp(this)
         loadConfig()
     }
 
@@ -514,22 +521,19 @@ class MainActivity : Activity() {
     }
 
     private fun requestBatteryOptimization() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-                try {
-                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                        data = Uri.parse("package:$packageName")
-                    }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        // minSdk 24，isIgnoringBatteryOptimizations 等 API 必然可用，无需版本判断
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
                 }
-            } else {
-                Toast.makeText(this, "已在电池优化白名单中", Toast.LENGTH_SHORT).show()
+                startActivity(intent)
+            } catch (e: Exception) {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             }
         } else {
-            Toast.makeText(this, "Android 6.0 以上才支持", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "已在电池优化白名单中", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -548,12 +552,11 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     btnCheckUpdate.isEnabled = true
                     btnCheckUpdate.text = "检查更新"
-                    if (result == null) {
-                        Toast.makeText(this, "检查更新失败，请检查网络连接", Toast.LENGTH_SHORT).show()
-                    } else if (result.first) {
-                        showUpdateDialog(result.second)
-                    } else {
-                        Toast.makeText(this, "当前已是最新版本", Toast.LENGTH_SHORT).show()
+                    when {
+                        result == null ->
+                            Toast.makeText(this, "检查更新失败，请检查网络连接", Toast.LENGTH_SHORT).show()
+                        result.hasUpdate -> showUpdateDialog(result.latestVersion)
+                        else -> Toast.makeText(this, "当前已是最新版本", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
@@ -581,12 +584,20 @@ class MainActivity : Activity() {
 
         AlertDialog.Builder(this)
             .setTitle("发现新版本 v$version")
-            .setMessage("是否下载更新？")
+            .setMessage("是否下载更新？下载完成后会自动校验安装包签名，校验不通过不会安装。")
             .setPositiveButton("下载") { _, _ ->
                 UpdateChecker.downloadUpdate(this,
                     onStart = { Toast.makeText(this, "开始下载...", Toast.LENGTH_SHORT).show() },
-                    onComplete = { success ->
-                        if (!success) Toast.makeText(this, "下载失败，请手动访问 GitHub", Toast.LENGTH_LONG).show()
+                    onComplete = { result ->
+                        val message = when (result) {
+                            UpdateChecker.DownloadResult.SUCCESS -> null
+                            UpdateChecker.DownloadResult.ALREADY_LATEST -> "当前已是最新版本"
+                            UpdateChecker.DownloadResult.REJECTED -> "安装包校验未通过，已拒绝安装"
+                            UpdateChecker.DownloadResult.FAILED -> "下载失败，请稍后重试或到 GitHub Releases 手动下载"
+                        }
+                        if (message != null) {
+                            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                        }
                     }
                 )
             }
@@ -595,6 +606,15 @@ class MainActivity : Activity() {
     }
 
     private fun autoSave() { saveConfig() }
+
+    /** 给文本框挂上自动保存。loadConfig() 回填时 isLoading 为 true，不会触发保存。 */
+    private fun attachAutoSave(vararg editors: EditText) {
+        editors.forEach { editor ->
+            editor.doAfterTextChanged {
+                if (!isLoading) autoSave()
+            }
+        }
+    }
 
     private fun loadConfig() {
         isLoading = true

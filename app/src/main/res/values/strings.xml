@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">杂鱼助手</string>
+    <string name="accessibility_service_description">把 QQ 聊天输入框里的文字替换成“杂鱼语”（我 → 本喵、句尾加喵、随机猫颜文字等）。仅在检测到 QQ 输入框内容变化时工作，不读取其它应用的任何内容。</string>
 </resources>

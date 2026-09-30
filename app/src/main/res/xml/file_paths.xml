@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <external-path
-        name="downloads"
-        path="Download/ZayuHelper/" />
+    <!-- 更新包下载到 getExternalFilesDir()/updates，交由 FileProvider 传给系统安装器 -->
+    <external-files-path
+        name="updates"
+        path="updates/" />
 </paths>

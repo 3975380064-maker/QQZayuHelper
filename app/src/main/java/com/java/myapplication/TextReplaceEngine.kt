@@ -21,9 +21,6 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     companion object {
         private const val TAG = "QQCatSvc"
         private const val ID_INPUT = "com.tencent.mobileqq:id/input"
-        private const val PLACEHOLDER_WO = "\ue000"
-        private const val PLACEHOLDER_NI = "\ue001"
-        private const val CUSTOM_RULE_PLACEHOLDER_PREFIX = "\ue010"
         private const val ECHO_WINDOW_MS = 800L
     }
 
@@ -131,6 +128,12 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     fun onInterrupt() {
         processing = false
         cancelPendingIdleTask()
+    }
+
+    /** 服务解绑时释放资源，避免 Handler 回调泄漏 */
+    fun release() {
+        onInterrupt()
+        handler.removeCallbacksAndMessages(null)
     }
 
     /** 核心处理流程 */
@@ -258,34 +261,8 @@ class TextReplaceEngine(private val service: AccessibilityService) {
             result = result.substring(0, result.length - cfg.meowSuffix.length).trim()
         }
 
-        // 3. 反转自定义替换规则（用唯一占位符避免冲突）
-        // 例：说=曰 和 话=曰 都映射到「曰」，逆序时先用唯一占位符区分再还原
-        if (cfg.customRules.isNotEmpty()) {
-            val reversePlaceholders = mutableMapOf<String, String>()
-            cfg.customRules.forEachIndexed { index, rule ->
-                val parts = rule.split("=", limit = 2)
-                if (parts.size == 2 && parts[0].isNotBlank()) {
-                    val ph = CUSTOM_RULE_PLACEHOLDER_PREFIX + index.toChar()
-                    reversePlaceholders[ph] = parts[0]
-                    result = result.replace(parts[1], ph)
-                }
-            }
-            for ((ph, original) in reversePlaceholders) {
-                result = result.replace(ph, original)
-            }
-        }
-
-        // 4. 反转替换词（用占位符避免交叉污染）
-        if (cfg.enableWoToBenmiao && cfg.woReplacement.isNotEmpty()) {
-            result = result.replace(cfg.woReplacement, PLACEHOLDER_WO)
-        }
-        if (cfg.enableNiToZhuren && cfg.niReplacement.isNotEmpty()) {
-            result = result.replace(cfg.niReplacement, PLACEHOLDER_NI)
-        }
-        result = result.replace(PLACEHOLDER_WO, "我")
-        result = result.replace(PLACEHOLDER_NI, "你")
-
-        return result.trim()
+        // 3. 还原替换词与自定义规则，实现在 ReplaceRules，保证与正向替换严格互逆
+        return ReplaceRules.revert(result, cfg).trim()
     }
 
     /**
@@ -304,22 +281,8 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     }
 
     /** 只应用替换变换（我/你/自定义规则），不加后缀/颜文字 */
-    private fun applyReplacementsOnly(text: String, cfg: CatConfig): String {
-        var result = text
-        if (cfg.enableWoToBenmiao && cfg.woReplacement.isNotEmpty()) {
-            result = result.replace("我", cfg.woReplacement)
-        }
-        if (cfg.enableNiToZhuren && cfg.niReplacement.isNotEmpty()) {
-            result = result.replace("你", cfg.niReplacement)
-        }
-        for (rule in cfg.customRules) {
-            val parts = rule.split("=", limit = 2)
-            if (parts.size == 2 && parts[0].isNotBlank()) {
-                result = result.replace(parts[0], parts[1])
-            }
-        }
-        return result
-    }
+    private fun applyReplacementsOnly(text: String, cfg: CatConfig): String =
+        ReplaceRules.apply(text, cfg)
 
     /** 从文本末尾剥离颜文字，只保留内容部分 */
     private fun stripSuffixEmoticon(text: String, cfg: CatConfig): String {
@@ -368,7 +331,6 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     }
 
     private fun setTextWithSelection(node: AccessibilityNodeInfo, text: String, cursorPos: Int): Boolean {
-        if (node == null) return false
         return try {
             val b = Bundle()
             b.putCharSequence("ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE", text)
@@ -387,7 +349,7 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     }
 
     private fun findNodeById(n: AccessibilityNodeInfo?, id: String): AccessibilityNodeInfo? {
-        if (n == null || id == null) return null
+        if (n == null) return null
         if (id == n.viewIdResourceName) {
             return AccessibilityNodeInfo.obtain(n)
         }
@@ -401,7 +363,7 @@ class TextReplaceEngine(private val service: AccessibilityService) {
     }
 
     private fun isPunctuationEnding(s: String): Boolean {
-        if (s.isNullOrEmpty()) return false
+        if (s.isEmpty()) return false
         val last = s.last()
         return last in charArrayOf('。', '！', '!', '？', '?')
     }

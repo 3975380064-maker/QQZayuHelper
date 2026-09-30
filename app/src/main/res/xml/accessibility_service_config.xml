@@ -1,3 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<accessibility-service android:accessibilityEventTypes="typeViewTextChanged|typeWindowStateChanged" android:packageNames="com.tencent.mobileqq,com.tencent.mobileqqi" android:accessibilityFeedbackType="feedbackGeneric" android:notificationTimeout="50" android:accessibilityFlags="flagDefault|flagReportViewIds|flagRetrieveInteractiveWindows" android:canRetrieveWindowContent="true"
-  xmlns:android="http://schemas.android.com/apk/res/android" />
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeViewTextChanged|typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="50"
+    android:packageNames="com.tencent.mobileqq,com.tencent.mobileqqi" />

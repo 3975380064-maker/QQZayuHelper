@@ -1,20 +1,21 @@
 package com.java.myapplication
 
-import java.util.Random
 import java.util.regex.Pattern
 
+/**
+ * 文本处理器：把用户原文加工成最终写回输入框的文本。
+ * 顺序固定：替换词（[ReplaceRules]）→ 句尾后缀 → 颜文字。
+ * 纯函数，不持有状态，便于单元测试。
+ */
 object TextProcessor {
 
-    private val RANDOM = Random()
     private val SENTENCE_SPLIT_PATTERN = Pattern.compile("([，。！？\\s]+)")
 
     private fun addMeow(text: String, suffix: String): String {
         val parts = mutableListOf<String>()
         val separators = mutableListOf<String>()
-
         val matcher = SENTENCE_SPLIT_PATTERN.matcher(text)
         var lastEnd = 0
-
         while (matcher.find()) {
             val before = text.substring(lastEnd, matcher.start())
             val sep = matcher.group(1) ?: ""
@@ -22,23 +23,20 @@ object TextProcessor {
             separators.add(sep)
             lastEnd = matcher.end()
         }
-
         if (lastEnd < text.length) {
             parts.add(text.substring(lastEnd))
         } else if (parts.isNotEmpty() && lastEnd == text.length) {
             parts.add("")
         }
-
         if (parts.isEmpty()) {
             parts.add(text)
         }
-
         val result = StringBuilder()
         for (i in parts.indices) {
             val part = parts[i].trim()
             if (part.isNotEmpty()) {
                 result.append(part)
-                // 如果该片段末尾已经有后缀，不再重复添加
+                // 该片段末尾已有后缀就不再重复添加
                 if (!part.endsWith(suffix)) {
                     result.append(suffix)
                 }
@@ -47,7 +45,6 @@ object TextProcessor {
                 result.append(separators[i])
             }
         }
-
         var resultStr = result.toString().trim()
         if (resultStr.isEmpty()) {
             resultStr = "$text$suffix"
@@ -56,8 +53,9 @@ object TextProcessor {
     }
 
     /**
-     * 根据文本内容确定性地选择颜文字，避免同文本每次处理随机不同导致反复写入。
-     * @param seed 文本内容（已做替换和加后缀），作为选择依据
+     * 根据文本内容确定性地选择颜文字。
+     * 用文本内容做种子而不是随机数，避免同一段文本每次处理得到不同装饰、
+     * 进而反复写回输入框打断用户输入。
      */
     private fun getRandomEmoticon(seed: String, config: CatConfig): String {
         val emoticons = config.getActiveEmoticons()
@@ -66,24 +64,17 @@ object TextProcessor {
         return emoticons[index]
     }
 
+    /** 把用户原文加工成最终文本。 */
     fun process(original: String, config: CatConfig): String {
-        if (original.isNullOrBlank()) return original
+        if (original.isBlank()) return original
 
         var text = original.trim()
-
-        if (config.enableWoToBenmiao) {
-            text = text.replace("我", config.woReplacement)
-        }
-        if (config.enableNiToZhuren) {
-            text = text.replace("你", config.niReplacement)
-        }
-        // 自定义替换规则
-        text = applyCustomRules(text, config)
+        text = ReplaceRules.apply(text, config)
         if (config.enableMeow) {
             text = addMeow(text, config.meowSuffix)
         }
         if (config.enableRandomEmoticon) {
-            // 如果文本末尾已经包含一个有效的颜文字，则保留它，不重新选
+            // 文本末尾已有有效颜文字就保留，不重新选
             val emoticons = config.getActiveEmoticons()
             val alreadyHasEmoticon = emoticons.any { em ->
                 text.endsWith(" $em") || text.endsWith(em)
@@ -96,21 +87,5 @@ object TextProcessor {
             }
         }
         return text
-    }
-
-    /**
-     * 应用自定义替换规则。
-     * 每条规则格式 "原词=替换词"，按配置顺序逐条替换。
-     */
-    private fun applyCustomRules(text: String, config: CatConfig): String {
-        if (config.customRules.isEmpty()) return text
-        var result = text
-        for (rule in config.customRules) {
-            val parts = rule.split("=", limit = 2)
-            if (parts.size == 2 && parts[0].isNotBlank()) {
-                result = result.replace(parts[0], parts[1])
-            }
-        }
-        return result
     }
 }
