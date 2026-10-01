@@ -89,9 +89,17 @@ class TextReplaceEngine(private val service: AccessibilityService) {
                 val currentText = cs.joinToString("")
                 val currentLen = currentText.length
                 if (currentLen < lastTextLength) {
-                    // 删除文本：取消 pending idleTask，更新长度
+                    // 删除文本：更新长度后**不能直接 return**。
+                    // 直接返回会让引擎从此“哑火”：智能模式下挂起的空闲任务被取消、
+                    // 也不重新计时，用户把后缀删掉就再也补不回来。
+                    // 这里改成重新计时 —— 停手一小会儿就恢复成装饰后的样子。
+                    // 标点模式的契约是“打标点才处理”，删除本身不触发，保持原语义。
                     lastTextLength = currentLen
-                    cancelPendingIdleTask()
+                    if (mode == CatConfig.REAL_TIME_MODE) {
+                        scheduleIdleTask(cfg.idleDelayMs.toLong())
+                    } else {
+                        cancelPendingIdleTask()
+                    }
                     return
                 }
                 lastTextLength = currentLen
