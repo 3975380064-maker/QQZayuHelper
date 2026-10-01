@@ -222,10 +222,10 @@ class TextReplaceEngine(private val service: AccessibilityService) {
                         return
                     }
 
-                    // target 与 raw 若只差装饰（开头前缀 / 句尾颜文字 / 句尾后缀），跳过写入。
-                    // 为了换个装饰而重写整个输入框，既突兀又会把光标拉到末尾。
-                    if (TextProcessor.isDecorationOnlyDiff(raw, target, cfg)) {
-                        Log.d(TAG, "仅装饰不同，跳过写入: raw=$raw target=$target")
+                    // 只有"颜文字选得不一样"才跳过写入（避免反复随机的颜文字导致无限重写）。
+                    // 前缀/后缀不同一律要写 —— 否则补装饰会被误判成换装饰而静默失效。
+                    if (TextProcessor.isEmoticonOnlyDiff(raw, target, cfg)) {
+                        Log.d(TAG, "仅颜文字不同，跳过写入: raw=$raw target=$target")
                         // 跳过了写入，框里实际还是 raw，lastSet 必须记录真实状态，
                         // 否则下一个事件会走“重新剥离”那条更脆弱的路径
                         lastSet = raw

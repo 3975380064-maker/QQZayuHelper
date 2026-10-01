@@ -166,25 +166,18 @@ object TextProcessor {
         return text
     }
 
-    /** 剥掉全部装饰（开头前缀、句尾颜文字、句尾后缀），只留正文。 */
-    fun stripDecorations(text: String, cfg: CatConfig): String {
-        var result = stripPrefix(text, cfg)
-        result = stripSuffixEmoticon(result, cfg)
-        result = stripMeowSuffix(result, cfg)
-        return result.trim()
-    }
-
     /**
-     * 判断 target 相对 raw 是否「只是装饰不同」，是的话就没必要重写输入框。
+     * 判断 target 相对 raw 是否**只是颜文字选得不一样**，是的话就没必要重写输入框。
      *
-     * 关键在于必须要求 raw **本身已经带装饰**。
-     * 少了这个条件就会出现这样的回归：用户刚打完纯文本（raw 无装饰），
-     * 引擎正想补上前缀/后缀，却因为「剥掉装饰后两边一样」被判定成
-     * 只是装饰不同而跳过写入 —— 表现就是怎么打都没有任何反应。
+     * 只有颜文字是随机挑的，所以"换了颜文字"不算真差异 —— 这是防抖的全部意义。
+     * 前缀来自固定配置、后缀由正文推导，它们不同就是真的不同，必须写入。
+     *
+     * 早先把前缀/后缀也纳入这个豁免，结果"给已有前缀的消息补后缀"会被判成
+     * 只是装饰不同而跳过写入，表现就是打了标点却毫无反应。
      */
-    fun isDecorationOnlyDiff(raw: String, target: String, cfg: CatConfig): Boolean {
-        val rawStripped = stripDecorations(raw, cfg)
-        return rawStripped != raw && rawStripped == stripDecorations(target, cfg)
+    fun isEmoticonOnlyDiff(raw: String, target: String, cfg: CatConfig): Boolean {
+        if (!cfg.enableRandomEmoticon) return false
+        return stripSuffixEmoticon(raw, cfg) == stripSuffixEmoticon(target, cfg)
     }
 
     /**

@@ -143,18 +143,23 @@ class TextProcessorTest {
     }
 
     @Test
-    fun `raw没有装饰时不算只差装饰`() {
-        // 回归用例：用户刚打完纯文本（无任何装饰），引擎要补前缀+后缀，
-        // 不能被“只差装饰”判定拦下，否则表现就是完全没反应。
-        val cfg = config().apply { enablePrefix = true }
-        val raw = "1236。？"
-        val target = TextProcessor.process(raw, cfg)
-        assertNotNull(TextProcessor.existingPrefix(target, cfg))
-        assertFalse(TextProcessor.isDecorationOnlyDiff(raw, target, cfg))
+    fun `已带前缀时补后缀必须写入`() {
+        // 复现上报的问题：输入框里是「唔…无聊」，打句号后应当补上后缀，
+        // 不能被“只是装饰不同”拦下 —— 有前缀没后缀 ≠ 前后缀都有。
+        val cfg = config().apply {
+            enablePrefix = true
+            prefixText = "唔…"
+            meowSuffix = "...喵..."
+            enableRandomEmoticon = false
+        }
+        val raw = "唔…无聊。"
+        val target = TextProcessor.process("无聊。", cfg, "唔…")
+        assertEquals("唔…无聊...喵...。", target)
+        assertFalse(TextProcessor.isEmoticonOnlyDiff(raw, target, cfg))
     }
 
     @Test
-    fun `raw已有装饰时只差颜文字才算`() {
+    fun `只有颜文字不同才跳过写入`() {
         val cfg = config().apply {
             enablePrefix = true
             prefixText = "唔…"
@@ -164,7 +169,13 @@ class TextProcessorTest {
         // 正文、前缀、后缀都一样，只有末尾颜文字不同 —— 这才是应当跳过写入的情况
         val raw = "唔…本喵要吃饭喵 ${emoticons[0]}"
         val target = "唔…本喵要吃饭喵 ${emoticons[1]}"
-        assertTrue(TextProcessor.isDecorationOnlyDiff(raw, target, cfg))
+        assertTrue(TextProcessor.isEmoticonOnlyDiff(raw, target, cfg))
+    }
+
+    @Test
+    fun `关闭颜文字时不会跳过写入`() {
+        val cfg = config().apply { enableRandomEmoticon = false }
+        assertFalse(TextProcessor.isEmoticonOnlyDiff("a", "b", cfg))
     }
 
     @Test
